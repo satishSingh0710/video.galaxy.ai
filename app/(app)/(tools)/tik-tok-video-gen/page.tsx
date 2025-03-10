@@ -27,6 +27,7 @@ export default function TikTokVideoGenPage() {
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number>(0);
   const [fullAudioUrl, setFullAudioUrl] = useState<string | null>(null);
   const [allWords, setAllWords] = useState<Array<{text: string, start: number, end: number}>>([]);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   
   // Refs for client-side rendering
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -45,6 +46,7 @@ export default function TikTokVideoGenPage() {
     try {
       setIsLoading(true);
       setError(null);
+      setSaveStatus('idle');
 
       // 1. Get script segments and image prompts
       const segmentsResponse = await fetch('/api/tik-tok-video-gen/getScriptAndImagePrompts', {
@@ -205,10 +207,36 @@ export default function TikTokVideoGenPage() {
       );
       
       setScriptSegments(processedSegments);
-      setCurrentStep('review');
-
-      console.log("processedSegments", processedSegments);
       
+      // Automatically save to database after all content is generated
+      try {
+        setSaveStatus('saving');
+        const saveResponse = await fetch('/api/tik-tok-video-gen/videos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            script: text,
+            audioUrl: audioData.audioUrl,
+            images: processedSegments,
+            captions: captionsData.words
+          }),
+        });
+
+        if (!saveResponse.ok) {
+          const errorData = await saveResponse.json();
+          throw new Error(errorData.error || 'Failed to save data');
+        }
+
+        const saveResult = await saveResponse.json();
+        setSaveStatus('saved');
+        console.log('Data saved successfully:', saveResult);
+      } catch (saveError) {
+        console.error('Error saving data:', saveError);
+        setSaveStatus('error');
+        // Don't throw here to allow the UI to still show the generated content
+      }
+
+      setCurrentStep('review');
     } catch (err) {
       console.error('Error processing script:', err);
       setError(err instanceof Error ? err.message : 'Failed to process script');
@@ -356,8 +384,30 @@ export default function TikTokVideoGenPage() {
           <div className="space-y-8">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-semibold text-gray-800">Preview</h2>
-              <div className="text-sm text-gray-600">
-                Segment {currentSegmentIndex + 1} of {scriptSegments.length}
+              <div className="flex items-center space-x-4">
+                <div className="text-sm text-gray-600">
+                  Segment {currentSegmentIndex + 1} of {scriptSegments.length}
+                </div>
+                {/* Save status indicator */}
+                {saveStatus === 'saving' && (
+                  <div className="text-sm text-blue-600 flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                    Saving...
+                  </div>
+                )}
+                {saveStatus === 'saved' && (
+                  <div className="text-sm text-green-600 flex items-center">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Saved
+                  </div>
+                )}
+                {saveStatus === 'error' && (
+                  <div className="text-sm text-red-600">
+                    Failed to save
+                  </div>
+                )}
               </div>
             </div>
             
@@ -430,6 +480,16 @@ export default function TikTokVideoGenPage() {
               </div>
             </div>
             
+            {/* Navigation and Edit buttons */}
+            <div className="flex justify-between items-center">
+              <button
+                onClick={() => setCurrentStep('script')}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Edit Script
+              </button>
+            </div>
+            
             {/* All segments preview */}
             <div className="mt-8">
               <h3 className="text-lg font-medium text-gray-800 mb-4">All Segments</h3>
@@ -458,15 +518,6 @@ export default function TikTokVideoGenPage() {
                   </div>
                 ))}
               </div>
-            </div>
-            
-            <div className="flex justify-end space-x-4 pt-6">
-              <button
-                onClick={() => setCurrentStep('script')}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-              >
-                Edit Script
-              </button>
             </div>
           </div>
         );
