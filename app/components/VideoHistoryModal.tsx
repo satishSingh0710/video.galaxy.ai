@@ -1,7 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { X, Play, Download } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Play, Download, Clock, Calendar } from 'lucide-react';
+import { Player } from '@remotion/player';
+import { RemotionVideo } from './RemotionVideo';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogOverlay,
+  DialogHeader,
+  DialogTitle 
+} from '@/components/ui/dialog';
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface Video {
   _id: string;
@@ -14,6 +24,11 @@ interface Video {
   }>;
   createdAt: string;
   url?: string;
+  captions?: Array<{
+    text: string;
+    start: number;
+    end: number;
+  }>;
 }
 
 interface VideoHistoryModalProps {
@@ -25,12 +40,28 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
   const [videos, setVideos] = useState<Video[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
+  const [showPlayer, setShowPlayer] = useState(false);
+  const [audioDuration, setAudioDuration] = useState<number>(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       fetchVideos();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (selectedVideo?.audioUrl) {
+      const audio = new Audio(selectedVideo.audioUrl);
+      audio.addEventListener('loadedmetadata', () => {
+        setAudioDuration(audio.duration);
+      });
+      return () => {
+        audio.remove();
+      };
+    }
+  }, [selectedVideo?.audioUrl]);
 
   const fetchVideos = async () => {
     try {
@@ -41,15 +72,14 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log('Fetched videos:', data); // For debugging
       
-      // Ensure each video has required fields
       const processedVideos = data.map((video: any) => ({
         ...video,
         title: video.title || 'Untitled',
         script: video.script || 'No script available',
         images: Array.isArray(video.images) ? video.images : [],
-        createdAt: video.createdAt || new Date().toISOString()
+        createdAt: video.createdAt || new Date().toISOString(),
+        captions: video.captions || []
       }));
       
       setVideos(processedVideos);
@@ -61,60 +91,49 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
     }
   };
 
-  const getVideoStatus = (video: Video) => {
-    if (video.url) {
-      return 'completed';
-    }
-    if (video.audioUrl) {
-      return 'processing';
-    }
-    return 'pending';
+  const handlePlayVideo = (video: Video) => {
+    setSelectedVideo(video);
+    setShowPlayer(true);
   };
 
-  const getStatusColor = (video: Video) => {
-    const status = getVideoStatus(video);
-    switch(status) {
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'processing':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'pending':
-        return 'bg-blue-100 text-blue-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div 
-          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" 
-          onClick={onClose}
-        />
+    <>
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+          {/* Background overlay */}
+          <div 
+            className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity backdrop-blur-sm" 
+            onClick={onClose}
+          />
 
-        {/* Modal panel */}
-        <div className="inline-block w-full max-w-6xl transform overflow-hidden rounded-lg bg-white p-6 text-left align-bottom shadow-xl transition-all sm:my-8 sm:align-middle">
-          <div className="absolute right-0 top-0 pr-4 pt-4">
-            <button
-              type="button"
-              className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none"
-              onClick={onClose}
-            >
-              <X className="h-6 w-6" />
-            </button>
-          </div>
+          {/* Modal panel */}
+          <div className="inline-block w-full max-w-7xl transform overflow-hidden rounded-lg bg-white p-6 text-left align-bottom shadow-xl transition-all sm:my-8 sm:align-middle">
+            <div className="absolute right-0 top-0 pr-4 pt-4">
+              <button
+                type="button"
+                className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none"
+                onClick={onClose}
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
 
-          <div className="sm:flex sm:items-start">
             <div className="w-full">
-              <h3 className="text-lg font-medium leading-6 text-gray-900">
-                Videos History
+              <h3 className="text-2xl font-bold text-gray-900 mb-6">
+                Your Videos
               </h3>
               
-              <div className="mt-4">
+              <ScrollArea className="h-[70vh] w-full rounded-md">
                 {loading ? (
                   <div className="flex items-center justify-center py-8">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-t-blue-600"></div>
@@ -124,102 +143,121 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
                 ) : videos.length === 0 ? (
                   <p className="py-8 text-center text-gray-500">No videos found</p>
                 ) : (
-                  <div className="mt-2">
-                    <div className="overflow-x-auto rounded-lg border">
-                      <table className="min-w-full divide-y divide-gray-200">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Title/Script
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Created At
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Status
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Images
-                            </th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                              Actions
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200 bg-white">
-                          {videos.map((video) => (
-                            <tr key={video._id} className="hover:bg-gray-50">
-                              <td className="px-6 py-4">
-                                <div className="text-sm font-medium text-gray-900">
-                                  {video.title}
-                                </div>
-                                <div className="mt-1 text-sm text-gray-500 line-clamp-2">
-                                  {video.script}
-                                </div>
-                              </td>
-                              <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
-                                {new Date(video.createdAt).toLocaleDateString()} {new Date(video.createdAt).toLocaleTimeString()}
-                              </td>
-                              <td className="whitespace-nowrap px-6 py-4 text-sm">
-                                <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${getStatusColor(video)}`}>
-                                  {getVideoStatus(video)}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex space-x-2">
-                                  {video.images.slice(0, 3).map((image, index) => (
-                                    <img
-                                      key={index}
-                                      src={image.imageUrl}
-                                      alt={image.contextText}
-                                      className="h-12 w-12 rounded object-cover"
-                                      title={image.contextText}
-                                    />
-                                  ))}
-                                  {video.images.length > 3 && (
-                                    <div className="flex h-12 w-12 items-center justify-center rounded bg-gray-100 text-sm text-gray-500">
-                                      +{video.images.length - 3}
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                              <td className="whitespace-nowrap px-6 py-4 text-sm">
-                                <div className="flex space-x-3">
-                                  {video.audioUrl && (
-                                    <a
-                                      href={video.audioUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="text-blue-600 hover:text-blue-800"
-                                      title="Play Audio"
-                                    >
-                                      <Play className="h-5 w-5" />
-                                    </a>
-                                  )}
-                                  {video.url && (
-                                    <a
-                                      href={video.url}
-                                      download
-                                      className="text-blue-600 hover:text-blue-800"
-                                      title="Download Video"
-                                    >
-                                      <Download className="h-5 w-5" />
-                                    </a>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-4">
+                    {videos.map((video) => (
+                      <div
+                        key={video._id}
+                        className="group relative bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300"
+                      >
+                        {/* Thumbnail */}
+                        <div className="aspect-[9/16] relative overflow-hidden bg-gray-100">
+                          {video.images[0] && (
+                            <img
+                              src={video.images[0].imageUrl}
+                              alt={video.title}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                          {/* Play button overlay */}
+                          {video.audioUrl && (
+                            <button
+                              onClick={() => handlePlayVideo(video)}
+                              className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                            >
+                              <div className="w-12 h-12 rounded-full bg-white/25 backdrop-blur-sm flex items-center justify-center">
+                                <Play className="h-6 w-6 text-white" />
+                              </div>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-4">
+                          <h4 className="font-semibold text-lg mb-2 line-clamp-1">
+                            {video.title}
+                          </h4>
+                          <p className="text-sm text-gray-600 line-clamp-2 mb-3">
+                            {video.script}
+                          </p>
+                          
+                          {/* Metadata */}
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4" />
+                              <span>{formatDate(video.createdAt)}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {video.url && (
+                                <a
+                                  href={video.url}
+                                  download
+                                  className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+                                  title="Download Video"
+                                >
+                                  <Download className="h-4 w-4" />
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
-              </div>
+              </ScrollArea>
             </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Video Player Dialog */}
+      {selectedVideo && (
+        <Dialog open={showPlayer} onOpenChange={(open: boolean) => {
+          setShowPlayer(open);
+          if (!open) setSelectedVideo(null);
+        }}>
+          <DialogOverlay className="bg-black/80 backdrop-blur-sm" />
+          <DialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-3xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 sm:rounded-lg">
+            <DialogHeader className="flex flex-row items-center justify-between">
+              <DialogTitle className="text-2xl font-bold">
+                {selectedVideo.title}
+              </DialogTitle>
+              <button
+                onClick={() => setShowPlayer(false)}
+                className="rounded-full p-2 hover:bg-gray-100 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </DialogHeader>
+            <div className="aspect-[9/16] w-full max-w-sm mx-auto">
+              <Player
+                component={RemotionVideo}
+                durationInFrames={Math.max(
+                  // Duration based on the last caption end time
+                  Math.ceil((selectedVideo.captions?.[selectedVideo.captions.length - 1]?.end || 0) / 1000 * 30),
+                  // Duration based on audio duration
+                  Math.ceil((audioDuration || 10) * 30),
+                  // Minimum duration for images
+                  selectedVideo.images.length * 30
+                )}
+                fps={30}
+                compositionWidth={1080}
+                compositionHeight={1920}
+                style={{
+                  width: '100%',
+                  height: '100%',
+                }}
+                controls
+                inputProps={{
+                  audioUrl: selectedVideo.audioUrl,
+                  images: selectedVideo.images,
+                  captions: selectedVideo.captions || [],
+                }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 } 

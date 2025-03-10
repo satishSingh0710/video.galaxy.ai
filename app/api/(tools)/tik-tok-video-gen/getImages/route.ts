@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
+import { uploadToCloudinary } from "@/app/utils/cloudinary";
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
@@ -42,8 +43,18 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Return the image URL
-        return NextResponse.json({ imageUrl });
+        // Upload the generated image to Cloudinary
+        const cloudinaryUrl = await uploadToCloudinary(imageUrl, 'image');
+        
+        if (!cloudinaryUrl) {
+            return NextResponse.json(
+                { error: "Failed to upload image to Cloudinary" },
+                { status: 500 }
+            );
+        }
+
+        // Return the Cloudinary URL
+        return NextResponse.json({ imageUrl: cloudinaryUrl });
     } catch (error: any) {
         console.error("Error in tik-tok-video-gen/getImages: ", error);
         

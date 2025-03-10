@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import VideoHistoryModal from "./components/VideoHistoryModal";
 import "./globals.css";
+import { Toaster } from 'react-hot-toast';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -103,6 +104,7 @@ export default function RootLayout({
           onClose={() => setIsHistoryModalOpen(false)}
         />
 
+        <Toaster position="top-center" />
         <main>{children}</main>
       </body>
     </html>
