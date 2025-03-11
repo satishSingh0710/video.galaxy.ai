@@ -13,7 +13,7 @@ export const RemotionRoot: React.FC = () => {
         width={1080}
         height={1920}
         defaultProps={{
-          audioUrl: '',
+          audioUrl: 'https://res.cloudinary.com/drt6u2nwp/video/upload/v1741602906/audio-uploads/z9msjfmzvvfw9dkyuncs.mp3',
           images: [],
           captions: [],
           captionStyle: 'default',

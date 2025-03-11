@@ -2,6 +2,7 @@
   "name": "text-audio",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -16,6 +17,7 @@
     "@radix-ui/react-slot": "^1.1.2",
     "@remotion/bundler": "^4.0.133",
     "@remotion/cli": "4.0.273",
+    "@remotion/cloudrun": "4.0.273",
     "@remotion/google-fonts": "^4.0.133",
     "@remotion/renderer": "^4.0.133",
     "@types/mongoose": "^5.11.96",
