@@ -9,7 +9,7 @@ const openai = new OpenAI({
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const { imagePrompt } = body;
+        const { imagePrompt, preset } = body;
 
         console.log("imagePrompt = ", imagePrompt);
 
@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
         // Generate image using DALL-E
         const response = await openai.images.generate({
             model: "dall-e-3",
-            prompt: imagePrompt,
+            prompt: `A ${preset} image of ${imagePrompt}`,
             n: 1,
             size: "1024x1024",
             quality: "standard",

@@ -7,7 +7,7 @@ export const RemotionRoot: React.FC = () => {
     <>
       <Composition
         id="TikTokVideo"
-        component={VideoComposition}
+        component={VideoComposition as unknown as React.ComponentType<Record<string, unknown>>}
         durationInFrames={300}
         fps={30}
         width={1080}
@@ -16,6 +16,7 @@ export const RemotionRoot: React.FC = () => {
           audioUrl: '',
           images: [],
           captions: [],
+          captionStyle: 'default',
         }}
       />
     </>

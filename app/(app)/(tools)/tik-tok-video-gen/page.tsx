@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import VoiceSelector from '../../../components/VoiceSelector';
 import AudioPlayer from '../../../components/AudioPlayer';
-import VideoPlayer from '../../../components/VideoPlayer';
+
 
 interface ScriptSegment {
   ContextText: string;
@@ -17,9 +17,23 @@ interface ScriptSegment {
   }>;
 }
 
+type ImagePreset = 'realistic' | 'sketch-color' | 'sketch-bw' | 'pixar' | 'flat-animation' | 'lego' | 'sci-fi' | 'ghibli';
+
+const IMAGE_PRESETS = [
+  { id: 'realistic', label: 'Realistic Photo' },
+  { id: 'sketch-color', label: 'Color Sketch' },
+  { id: 'sketch-bw', label: 'Black & White Sketch' },
+  { id: 'pixar', label: 'Pixar Style' },
+  { id: 'flat-animation', label: 'Flat Animation' },
+  { id: 'lego', label: 'Lego Style' },
+  { id: 'sci-fi', label: 'Sci-Fi Art' },
+  { id: 'ghibli', label: 'Studio Ghibli' },
+] as const;
+
 export default function TikTokVideoGenPage() {
   const [text, setText] = useState<string>('');
   const [selectedVoice, setSelectedVoice] = useState<string>('');
+  const [selectedPreset, setSelectedPreset] = useState<ImagePreset>('realistic');
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
   const [currentStep, setCurrentStep] = useState<'script' | 'processing' | 'review'>('script');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -153,7 +167,8 @@ export default function TikTokVideoGenPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              imagePrompt: segment.ImagePrompt
+              imagePrompt: segment.ImagePrompt,
+              preset: selectedPreset
             }),
           });
           
@@ -349,6 +364,28 @@ export default function TikTokVideoGenPage() {
             </div>
             
             <VoiceSelector onVoiceSelect={handleVoiceSelect} selectedVoice={selectedVoice} />
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-gray-700">
+                Select Image Style
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {IMAGE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => setSelectedPreset(preset.id as ImagePreset)}
+                    className={`p-3 text-sm rounded-lg border transition-all ${
+                      selectedPreset === preset.id
+                        ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500 ring-opacity-50'
+                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             
             {error && (
               <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm">

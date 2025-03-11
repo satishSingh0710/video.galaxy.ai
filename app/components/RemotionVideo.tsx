@@ -12,9 +12,10 @@ interface RemotionVideoProps {
     start: number;
     end: number;
   }>;
+  captionStyle?: 'default' | 'highlightEachWord' | 'highlightSpokenWord' | 'wordByWord';
 }
 
-export function RemotionVideo({ audioUrl, images, captions }: RemotionVideoProps) {
+export function RemotionVideo({ audioUrl, images, captions, captionStyle = 'default' }: RemotionVideoProps) {
   // Debug captions in RemotionVideo
   React.useEffect(() => {
     console.log('RemotionVideo received captions:', captions);
@@ -25,6 +26,7 @@ export function RemotionVideo({ audioUrl, images, captions }: RemotionVideoProps
       audioUrl={audioUrl}
       images={images}
       captions={captions}
+      captionStyle={captionStyle}
     />
   );
 }

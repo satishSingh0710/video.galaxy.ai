@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
         4. Each object should have 2 keys, ContextText and ImagePrompt.
         5. ContextText is the part that the narrator will say and ImagePrompt is the prompt to generate the image what will be rendered for the time narrator will say that.
         6. The output should be an array of objects. 
-        7. The array should be named as "result".
+        7. The array should be named as "result". 
         8. Please don't add any other thing to the script and the ContextText outside of the words used in the script. 
         9. Sentence structure should be same as the script.
         

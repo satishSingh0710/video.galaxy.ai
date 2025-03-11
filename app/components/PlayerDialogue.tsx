@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogTrigger, DialogHeader, DialogTitle, Dialog
 import { Player } from '@remotion/player';
 import { RemotionVideo } from "./RemotionVideo";
 import { useEffect, useState } from "react";
-import { renderAndDownloadVideo } from "@/app/utils/videoRenderer";
 import toast from "react-hot-toast";
 import { Download, Loader2, X } from "lucide-react";
 
@@ -23,11 +22,11 @@ interface PlayerDialogueProps {
       _id?: string;
     }>;
   };
+  captionStyle?: 'default' | 'highlightEachWord' | 'highlightSpokenWord' | 'wordByWord';
 }
 
-export default function PlayerDialogue({ playVideo, videoId, videoData }: PlayerDialogueProps) {
+export default function PlayerDialogue({ playVideo, videoId, videoData, captionStyle = 'default' }: PlayerDialogueProps) {
   const [openDialog, setOpenDialog] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number>(0);
 
   useEffect(() => {
@@ -43,33 +42,6 @@ export default function PlayerDialogue({ playVideo, videoId, videoData }: Player
       };
     }
   }, [playVideo, videoData]);
-
-  const handleDownload = async () => {
-    if (!videoData) {
-      toast.error("Video data not available");
-      return;
-    }
-
-    try {
-      setIsDownloading(true);
-      const videoUrl = await renderAndDownloadVideo(videoData);
-      
-      // Create a temporary link element to trigger the download
-      const link = document.createElement('a');
-      link.href = videoUrl;
-      link.download = `video-${videoId}.mp4`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      toast.success("Video downloaded successfully!");
-    } catch (error) {
-      console.error("Error downloading video:", error);
-      toast.error("Failed to download video. Please try again.");
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   // Calculate duration based on multiple factors
   const durationInFrames = Math.max(
@@ -110,30 +82,12 @@ export default function PlayerDialogue({ playVideo, videoId, videoData }: Player
               }}
               controls
               inputProps={{
-                audioUrl: videoData?.audioUrl,
+                audioUrl: videoData?.audioUrl || '',
                 images: videoData?.images || [],
                 captions: videoData?.captions || [],
+                captionStyle,
               }}
             />
-
-            {/* Download button overlay */}
-            <button
-              onClick={handleDownload}
-              disabled={isDownloading}
-              className="absolute right-4 bottom-20 z-50 flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-lg transition-all hover:scale-105 disabled:bg-blue-400 disabled:cursor-not-allowed"
-            >
-              {isDownloading ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  <span className="text-sm">Processing...</span>
-                </>
-              ) : (
-                <>
-                  <Download className="h-5 w-5" />
-                  {/* <span className="text-sm">Download MP4</span> */}
-                </>
-              )}
-            </button>
           </div>
         </DialogContent>
       </Dialog>
