@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         console.log("getaudio: Starting audio generation");
         // Parse the request body
         const body = await request.json();
-        const { text, voiceId = "BFqnCBsd6RMkjVDRZzb" } = body;
+        const { text, voiceId = "BFqnCBsd6RMkjVDRZzb", speed = 1.0 } = body;
 
         console.log(`getaudio: Processing text (${text.length} chars) with voiceId: ${voiceId}`);
         
@@ -90,7 +90,11 @@ export async function POST(request: NextRequest) {
         const audioStream = await client.textToSpeech.convert(voiceId, {
             output_format: "mp3_44100_128",
             text: text, 
-            model_id: "eleven_multilingual_v2"
+            model_id: "eleven_multilingual_v2", 
+            voice_settings: {
+                speed: speed, 
+                style: 0.3, 
+            }
         });
 
         console.log("getaudio: Received audio stream from ElevenLabs");

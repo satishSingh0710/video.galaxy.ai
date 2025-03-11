@@ -83,14 +83,12 @@ export default function VoiceSelector({ onVoiceSelect, selectedVoice }: VoiceSel
   if (isLoading) {
     return (
       <div className="my-4">
-        <div className="animate-pulse flex space-x-4">
-          <div className="flex-1 space-y-4 py-1">
-            <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-            <div className="space-y-2">
-              <div className="h-10 bg-gray-200 rounded"></div>
-              <div className="h-10 bg-gray-200 rounded"></div>
-              <div className="h-10 bg-gray-200 rounded"></div>
-            </div>
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+          <div className="flex space-x-4 overflow-x-auto pb-2">
+            <div className="h-32 w-48 flex-shrink-0 bg-gray-200 rounded"></div>
+            <div className="h-32 w-48 flex-shrink-0 bg-gray-200 rounded"></div>
+            <div className="h-32 w-48 flex-shrink-0 bg-gray-200 rounded"></div>
           </div>
         </div>
       </div>
@@ -122,77 +120,83 @@ export default function VoiceSelector({ onVoiceSelect, selectedVoice }: VoiceSel
         />
       </div>
       
-      <div className="max-h-96 overflow-y-auto border border-gray-200 rounded-md">
-        {filteredVoices.length === 0 ? (
-          <div className="p-4 text-center text-gray-500">
-            No voices found matching your search
-          </div>
-        ) : (
-          <ul className="divide-y divide-gray-200">
+      {filteredVoices.length === 0 ? (
+        <div className="p-4 text-center text-gray-500 border border-gray-200 rounded-md">
+          No voices found matching your search
+        </div>
+      ) : (
+        <div className="relative">
+          <div className="flex overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 -mx-1 px-1">
             {filteredVoices.map((voice) => (
-              <li 
+              <div 
                 key={voice.voice_id}
-                className={`p-4 hover:bg-gray-50 cursor-pointer transition-colors ${
-                  selectedVoice === voice.voice_id ? 'bg-blue-50 border-l-4 border-blue-500' : ''
+                className={`flex-shrink-0 w-64 mx-2 p-4 rounded-lg border transition-all ${
+                  selectedVoice === voice.voice_id 
+                    ? 'border-blue-500 bg-blue-50 shadow-md' 
+                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                 }`}
                 onClick={() => onVoiceSelect(voice.voice_id)}
               >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-800">{voice.name}</h3>
-                    <div className="mt-1 flex flex-wrap gap-2">
-                      {voice.labels?.gender && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                          {voice.labels.gender}
-                        </span>
-                      )}
-                      {voice.labels?.accent && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                          {voice.labels.accent}
-                        </span>
-                      )}
-                      {voice.labels?.age && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                          {voice.labels.age}
-                        </span>
-                      )}
-                    </div>
-                    {voice.labels?.description && (
-                      <p className="mt-1 text-xs text-gray-500 line-clamp-2">{voice.labels.description}</p>
+                <div className="flex flex-col h-full">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-gray-800 truncate">{voice.name}</h3>
+                    
+                    {voice.preview_url && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          playPreview(voice.voice_id, voice.preview_url);
+                        }}
+                        className={`p-2 rounded-full ${
+                          audioPlaying === voice.voice_id
+                            ? 'bg-blue-100 text-blue-600'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                        aria-label={audioPlaying === voice.voice_id ? "Stop preview" : "Play preview"}
+                      >
+                        {audioPlaying === voice.voice_id ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
+                          </svg>
+                        )}
+                      </button>
                     )}
                   </div>
                   
-                  {voice.preview_url && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        playPreview(voice.voice_id, voice.preview_url);
-                      }}
-                      className={`ml-4 p-2 rounded-full ${
-                        audioPlaying === voice.voice_id
-                          ? 'bg-blue-100 text-blue-600'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                      aria-label={audioPlaying === voice.voice_id ? "Stop preview" : "Play preview"}
-                    >
-                      {audioPlaying === voice.voice_id ? (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1zm4 0a1 1 0 00-1 1v4a1 1 0 002 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                      ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clipRule="evenodd" />
-                        </svg>
-                      )}
-                    </button>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {voice.labels?.gender && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                        {voice.labels.gender}
+                      </span>
+                    )}
+                    {voice.labels?.accent && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                        {voice.labels.accent}
+                      </span>
+                    )}
+                    {voice.labels?.age && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                        {voice.labels.age}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {voice.labels?.description && (
+                    <p className="text-xs text-gray-500 line-clamp-2 mt-auto">{voice.labels.description}</p>
                   )}
                 </div>
-              </li>
+              </div>
             ))}
-          </ul>
-        )}
-      </div>
+          </div>
+          
+          <div className="absolute left-0 right-0 bottom-0 h-1 bg-gradient-to-r from-transparent via-gray-200 to-transparent opacity-50"></div>
+        </div>
+      )}
       
       {selectedVoice && (
         <div className="mt-2 text-sm text-gray-500">

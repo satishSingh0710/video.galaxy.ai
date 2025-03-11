@@ -1,8 +1,6 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
-import Image from 'next/image';
 import VoiceSelector from '../../../components/VoiceSelector';
-import AudioPlayer from '../../../components/AudioPlayer';
 
 
 interface ScriptSegment {
@@ -34,6 +32,7 @@ export default function TikTokVideoGenPage() {
   const [text, setText] = useState<string>('');
   const [selectedVoice, setSelectedVoice] = useState<string>('');
   const [selectedPreset, setSelectedPreset] = useState<ImagePreset>('realistic');
+  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
   const [currentStep, setCurrentStep] = useState<'script' | 'processing' | 'review'>('script');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -54,6 +53,10 @@ export default function TikTokVideoGenPage() {
 
   const handleVoiceSelect = (voiceId: string) => {
     setSelectedVoice(voiceId);
+  };
+
+  const handleVoiceSpeedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVoiceSpeed(parseFloat(e.target.value));
   };
 
   const processScript = async () => {
@@ -100,7 +103,8 @@ export default function TikTokVideoGenPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text,
-          voiceId: selectedVoice
+          voiceId: selectedVoice,
+          speed: voiceSpeed
         }),
       });
 
@@ -364,6 +368,26 @@ export default function TikTokVideoGenPage() {
             </div>
             
             <VoiceSelector onVoiceSelect={handleVoiceSelect} selectedVoice={selectedVoice} />
+
+            <div className="space-y-2">
+              <label htmlFor="voiceSpeed" className="block text-sm font-medium text-gray-700">
+                Voice Speed: {voiceSpeed.toFixed(1)}x
+              </label>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-gray-500">0.7x</span>
+                <input
+                  id="voiceSpeed"
+                  type="range"
+                  min="0.7"
+                  max="1.2"
+                  step="0.1"
+                  value={voiceSpeed}
+                  onChange={handleVoiceSpeedChange}
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                />
+                <span className="text-xs text-gray-500">1.2x</span>
+              </div>
+            </div>
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">

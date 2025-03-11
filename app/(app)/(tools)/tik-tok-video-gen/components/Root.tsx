@@ -1,6 +1,6 @@
 import React from 'react';
 import { Composition } from 'remotion';
-import { VideoComposition } from '../../components/VideoComposition';
+import { VideoComposition } from './VideoComposition';
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -21,4 +21,4 @@ export const RemotionRoot: React.FC = () => {
       />
     </>
   );
-};
+}; 

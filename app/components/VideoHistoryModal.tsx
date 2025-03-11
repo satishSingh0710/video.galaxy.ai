@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Play, Download, Clock, Calendar } from 'lucide-react';
 import { Player } from '@remotion/player';
-import { RemotionVideo } from './RemotionVideo';
+import { RemotionVideo } from '@/app/(app)/(tools)/tik-tok-video-gen/components/RemotionVideo';
 import { 
   Dialog, 
   DialogContent, 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { VideoComposition } from '@/components/VideoComposition';
+import { VideoComposition } from './VideoComposition';
 
 interface RemotionVideoProps {
   audioUrl: string;
@@ -29,4 +29,4 @@ export function RemotionVideo({ audioUrl, images, captions, captionStyle = 'defa
       captionStyle={captionStyle}
     />
   );
-}
+} 

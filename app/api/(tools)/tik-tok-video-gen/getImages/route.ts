@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
         // Generate image using DALL-E
         const response = await openai.images.generate({
             model: "dall-e-3",
-            prompt: `A ${preset} image of ${imagePrompt}`,
+            prompt: `A ${preset} image of ${imagePrompt}, and make sure the image do not have any text on it.`,
             n: 1,
             size: "1024x1024",
             quality: "standard",
