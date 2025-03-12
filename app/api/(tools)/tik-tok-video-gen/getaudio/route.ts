@@ -91,10 +91,6 @@ export async function POST(request: NextRequest) {
             output_format: "mp3_44100_128",
             text: text, 
             model_id: "eleven_multilingual_v2", 
-            voice_settings: {
-                speed: speed, 
-                style: 0.3, 
-            }
         });
 
         console.log("getaudio: Received audio stream from ElevenLabs");

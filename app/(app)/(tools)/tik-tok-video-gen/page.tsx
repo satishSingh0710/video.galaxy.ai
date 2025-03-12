@@ -1,6 +1,8 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
 import VoiceSelector from '../../../components/VoiceSelector';
+import VideoHistoryModal from '../../../components/VideoHistoryModal';
+import { Trash2 } from 'lucide-react';
 
 
 interface ScriptSegment {
@@ -41,6 +43,8 @@ export default function TikTokVideoGenPage() {
   const [fullAudioUrl, setFullAudioUrl] = useState<string | null>(null);
   const [allWords, setAllWords] = useState<Array<{text: string, start: number, end: number}>>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [showVideoHistory, setShowVideoHistory] = useState<boolean>(false);
   
   // Refs for client-side rendering
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -227,38 +231,68 @@ export default function TikTokVideoGenPage() {
       
       setScriptSegments(processedSegments);
       
-      // Automatically save to database after all content is generated
+      // Save to database and automatically start video generation
       try {
         setSaveStatus('saving');
-        const saveResponse = await fetch('/api/tik-tok-video-gen/videos', {
+        
+        // Prepare data for saving
+        const data = {
+          script: text,
+          audioUrl: fullAudioUrl,
+          images: processedSegments.map(segment => ({
+            contextText: segment.ContextText,
+            imageUrl: segment.imageUrl
+          })),
+          captions: captionsData.words
+        };
+        
+        // Send to API
+        const response = await fetch('/api/tik-tok-video-gen/videos', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            script: text,
-            audioUrl: audioData.audioUrl,
-            images: processedSegments,
-            captions: captionsData.words
-          }),
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(data)
         });
+        
+        if (!response.ok) {
+          throw new Error('Failed to save video data');
+        }
+        
+        const result = await response.json();
+        setVideoId(result.videoId);
+        setSaveStatus('saved');
 
-        if (!saveResponse.ok) {
-          const errorData = await saveResponse.json();
-          throw new Error(errorData.error || 'Failed to save data');
+        // Automatically start video generation
+        console.log('Starting automatic video generation for videoId:', result.videoId);
+        const generateResponse = await fetch('/api/tik-tok-video-gen/generate-video', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ videoId: result.videoId })
+        });
+        
+        if (!generateResponse.ok) {
+          const errorData = await generateResponse.json();
+          throw new Error(errorData.error || 'Failed to generate video');
+        }
+        
+        const generateResult = await generateResponse.json();
+        if (generateResult.success) {
+          alert('Video generation started! You can check the status in the Video History.');
         }
 
-        const saveResult = await saveResponse.json();
-        setSaveStatus('saved');
-        console.log('Data saved successfully:', saveResult);
-      } catch (saveError) {
-        console.error('Error saving data:', saveError);
+      } catch (error) {
+        console.error('Error saving and generating video:', error);
         setSaveStatus('error');
-        // Don't throw here to allow the UI to still show the generated content
+        throw error;
       }
 
       setCurrentStep('review');
-    } catch (err) {
-      console.error('Error processing script:', err);
-      setError(err instanceof Error ? err.message : 'Failed to process script');
+    } catch (error) {
+      console.error('Error processing script:', error);
+      setError(error instanceof Error ? error.message : 'An unexpected error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -347,62 +381,177 @@ export default function TikTokVideoGenPage() {
     }
   }, [currentSegmentIndex, currentStep, scriptSegments]);
 
+  const saveToDatabase = async () => {
+    try {
+      setSaveStatus('saving');
+      
+      // Prepare data for saving
+      const data = {
+        script: text,
+        audioUrl: fullAudioUrl,
+        images: scriptSegments.map(segment => ({
+          contextText: segment.ContextText,
+          imageUrl: segment.imageUrl
+        })),
+        captions: allWords
+      };
+      
+      // Send to API
+      const response = await fetch('/api/tik-tok-video-gen/videos', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to save video data');
+      }
+      
+      const result = await response.json();
+      setVideoId(result.videoId);
+      setSaveStatus('saved');
+      
+      return result.videoId;
+    } catch (error) {
+      console.error('Error saving video data:', error);
+      setSaveStatus('error');
+      throw error;
+    }
+  };
+  
+  const generateVideo = async () => {
+    try {
+      // First save the data if not already saved
+      let id = videoId;
+      if (!id) {
+        id = await saveToDatabase();
+      }
+      
+      // Now generate the video
+      setIsLoading(true);
+      const response = await fetch('/api/tik-tok-video-gen/generate-video', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ videoId: id })
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to generate video');
+      }
+      
+      const result = await response.json();
+      alert('Video generation started! You can check the status in the Video History.');
+      
+    } catch (error) {
+      console.error('Error generating video:', error);
+      alert('Failed to generate video: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const openVideoHistory = () => {
+    setShowVideoHistory(true);
+  };
+
+  const deleteVideo = async () => {
+    if (!videoId) {
+      // If no video ID, just reset the form
+      setText('');
+      setSelectedVoice('');
+      setVoiceSpeed(1.0);
+      setSelectedPreset('realistic');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/tik-tok-video-gen/videos/${videoId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete video');
+      }
+
+      // Reset all states
+      setText('');
+      setSelectedVoice('');
+      setVoiceSpeed(1.0);
+      setSelectedPreset('realistic');
+      setVideoId(null);
+      setScriptSegments([]);
+      setFullAudioUrl(null);
+      setAllWords([]);
+      setSaveStatus('idle');
+      setCurrentStep('script');
+
+      // Show success message
+      alert('Video deleted successfully');
+    } catch (error) {
+      console.error('Error deleting video:', error);
+      alert('Failed to delete video: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    }
+  };
+
   const renderCurrentStep = () => {
     switch (currentStep) {
       case 'script':
         return (
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label htmlFor="text" className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <label htmlFor="script" className="block text-sm font-medium text-gray-700">
                 Enter your script
               </label>
               <textarea
-                id="text"
+                id="script"
+                rows={6}
+                className="w-full rounded-md border border-gray-300 p-3 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                placeholder="Enter your TikTok script here..."
                 value={text}
                 onChange={handleTextChange}
-                placeholder="Type your script here..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-black"
-                rows={5}
-                required
               />
             </div>
             
-            <VoiceSelector onVoiceSelect={handleVoiceSelect} selectedVoice={selectedVoice} />
-
-            <div className="space-y-2">
-              <label htmlFor="voiceSpeed" className="block text-sm font-medium text-gray-700">
-                Voice Speed: {voiceSpeed.toFixed(1)}x
-              </label>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-500">0.7x</span>
-                <input
-                  id="voiceSpeed"
-                  type="range"
-                  min="0.7"
-                  max="1.2"
-                  step="0.1"
-                  value={voiceSpeed}
-                  onChange={handleVoiceSpeedChange}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                />
-                <span className="text-xs text-gray-500">1.2x</span>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Select Voice</label>
+                <VoiceSelector onVoiceSelect={handleVoiceSelect} selectedVoice={selectedVoice} />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Voice Speed</label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="range"
+                    min="0.5"
+                    max="2"
+                    step="0.1"
+                    value={voiceSpeed}
+                    onChange={handleVoiceSpeedChange}
+                    className="w-full"
+                  />
+                  <span className="text-sm">{voiceSpeed}x</span>
+                </div>
               </div>
             </div>
-
-            <div className="space-y-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Select Image Style
-              </label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700">Image Style</label>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 {IMAGE_PRESETS.map((preset) => (
                   <button
                     key={preset.id}
                     type="button"
-                    onClick={() => setSelectedPreset(preset.id as ImagePreset)}
-                    className={`p-3 text-sm rounded-lg border transition-all ${
+                    onClick={() => setSelectedPreset(preset.id)}
+                    className={`rounded-md px-3 py-2 text-sm font-medium ${
                       selectedPreset === preset.id
-                        ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-500 ring-opacity-50'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-900 hover:bg-gray-200'
                     }`}
                   >
                     {preset.label}
@@ -411,26 +560,25 @@ export default function TikTokVideoGenPage() {
               </div>
             </div>
             
-            {error && (
-              <div className="p-3 bg-red-100 text-red-700 rounded-md text-sm">
-                {error}
-              </div>
-            )}
-            
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`w-full py-2 px-4 rounded-md font-medium transition-colors ${
-                isLoading 
-                  ? "bg-blue-300 cursor-not-allowed" 
-                  : "bg-blue-600 hover:bg-blue-700 text-white"
-              }`}
-            >
-              {isLoading ? "Processing..." : "Generate Content"}
-            </button>
-          </form>
+            <div className="flex justify-between">
+  
+              
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!text || !selectedVoice}
+                className={`rounded-md px-4 py-2 w-full text-sm font-medium ${
+                  !text || !selectedVoice
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                Process Script
+              </button>
+            </div>
+          </div>
         );
-      
+        
       case 'processing':
         return (
           <div className="text-center py-8">
@@ -442,142 +590,151 @@ export default function TikTokVideoGenPage() {
       case 'review':
         const currentSegment = scriptSegments[currentSegmentIndex];
         return (
-          <div className="space-y-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-semibold text-gray-800">Preview</h2>
-              <div className="flex items-center space-x-4">
-                <div className="text-sm text-gray-600">
-                  Segment {currentSegmentIndex + 1} of {scriptSegments.length}
-                </div>
-                {/* Save status indicator */}
-                {saveStatus === 'saving' && (
-                  <div className="text-sm text-blue-600 flex items-center">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                    Saving...
-                  </div>
-                )}
-                {saveStatus === 'saved' && (
-                  <div className="text-sm text-green-600 flex items-center">
-                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                    Saved
-                  </div>
-                )}
-                {saveStatus === 'error' && (
-                  <div className="text-sm text-red-600">
-                    Failed to save
-                  </div>
-                )}
-              </div>
-            </div>
-            
-            {/* Client-side rendering area */}
-            <div className="bg-gray-50 rounded-lg p-4 space-y-6">
-              {/* Image display */}
-              {currentSegment?.imageUrl && (
-                <div className="relative w-full h-64 md:h-80 rounded-md overflow-hidden bg-gray-200">
-                  <img
-                    src={currentSegment.imageUrl}
-                    alt={`Generated image for segment ${currentSegmentIndex + 1}`}
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      // If image fails to load, replace with a placeholder
-                      const imgElement = e.currentTarget;
-                      imgElement.onerror = null; // Prevent infinite error loop
-                      imgElement.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='200' viewBox='0 0 400 200'%3E%3Crect width='400' height='200' fill='%23f0f0f0'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-family='sans-serif' font-size='18' fill='%23999'%3EImage unavailable%3C/text%3E%3C/svg%3E";
-                    }}
-                  />
-                </div>
-              )}
-              
-              {/* Audio with captions */}
-              <div className="space-y-3">
-                <audio 
-                  ref={audioRef}
-                  controls
-                  onTimeUpdate={handleTimeUpdate}
-                  onEnded={handleAudioEnded}
-                  className="w-full"
-                >
-                  {fullAudioUrl && <source src={fullAudioUrl} type="audio/mpeg" />}
-                  Your browser does not support the audio element.
-                </audio>
-                
-                {/* Captions display */}
-                <div 
-                  ref={captionsRef}
-                  className="p-4 bg-white rounded-md shadow-sm text-lg text-center leading-relaxed min-h-[80px]"
-                >
-                  {currentSegment?.ContextText || "No captions available"}
-                </div>
-              </div>
-              
-              {/* Navigation controls */}
-              <div className="flex justify-between pt-4">
+          <div className="space-y-6">
+            <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-medium text-gray-900">Preview</h3>
                 <button
-                  onClick={() => setCurrentSegmentIndex(prev => Math.max(0, prev - 1))}
-                  disabled={currentSegmentIndex === 0}
-                  className={`px-4 py-2 rounded-md ${
-                    currentSegmentIndex === 0
-                      ? "bg-gray-300 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700 text-white"
-                  }`}
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to delete this video?')) {
+                      deleteVideo();
+                    }
+                  }}
+                  className="rounded-md bg-red-50 p-2 text-red-600 hover:bg-red-100 transition-colors"
+                  title="Delete video"
                 >
-                  Previous
-                </button>
-                
-                <button
-                  onClick={() => setCurrentSegmentIndex(prev => Math.min(scriptSegments.length - 1, prev + 1))}
-                  disabled={currentSegmentIndex === scriptSegments.length - 1}
-                  className={`px-4 py-2 rounded-md ${
-                    currentSegmentIndex === scriptSegments.length - 1
-                      ? "bg-gray-300 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700 text-white"
-                  }`}
-                >
-                  Next
+                  <Trash2 size={20} />
                 </button>
               </div>
-            </div>
-            
-            {/* Navigation and Edit buttons */}
-            <div className="flex justify-between items-center">
-              <button
-                onClick={() => setCurrentStep('script')}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-              >
-                Edit Script
-              </button>
-            </div>
-            
-            {/* All segments preview */}
-            <div className="mt-8">
-              <h3 className="text-lg font-medium text-gray-800 mb-4">All Segments</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                {scriptSegments.map((segment, index) => (
-                  <div 
-                    key={index} 
-                    className={`bg-gray-50 rounded-lg p-3 cursor-pointer transition-all ${
-                      currentSegmentIndex === index ? 'ring-2 ring-blue-500' : 'hover:bg-gray-100'
-                    }`}
-                    onClick={() => setCurrentSegmentIndex(index)}
-                  >
-                    <div className="relative w-full h-32 rounded-md overflow-hidden bg-gray-200 mb-2">
-                      {segment.imageUrl && (
-                        <img
-                          src={segment.imageUrl}
-                          alt={`Thumbnail for segment ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      )}
-                      <div className="absolute top-2 right-2 bg-black bg-opacity-70 text-white text-xs px-2 py-1 rounded-full">
-                        {index + 1}
+              
+              <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-2">
+                <div className="space-y-4">
+                  <div className="aspect-square overflow-hidden rounded-lg bg-gray-100">
+                    {currentSegment?.imageUrl ? (
+                      <img
+                        src={currentSegment.imageUrl}
+                        alt={currentSegment.ContextText}
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center">
+                        <p className="text-gray-500">No image generated</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setCurrentSegmentIndex(Math.max(0, currentSegmentIndex - 1))}
+                      disabled={currentSegmentIndex === 0}
+                      className={`rounded-md px-3 py-1 text-sm ${
+                        currentSegmentIndex === 0
+                          ? 'bg-gray-100 text-gray-400'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Previous
+                    </button>
+                    
+                    <span className="text-sm text-gray-500">
+                      {currentSegmentIndex + 1} of {scriptSegments.length}
+                    </span>
+                    
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCurrentSegmentIndex(Math.min(scriptSegments.length - 1, currentSegmentIndex + 1))
+                      }
+                      disabled={currentSegmentIndex === scriptSegments.length - 1}
+                      className={`rounded-md px-3 py-1 text-sm ${
+                        currentSegmentIndex === scriptSegments.length - 1
+                          ? 'bg-gray-100 text-gray-400'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-sm text-gray-700">{currentSegment?.ContextText}</p>
+                  </div>
+                  
+                  {fullAudioUrl && (
+                    <div>
+                      <audio
+                        ref={audioRef}
+                        src={fullAudioUrl}
+                        controls
+                        className="w-full"
+                        onTimeUpdate={handleTimeUpdate}
+                        onEnded={handleAudioEnded}
+                      />
+                      
+                      <div
+                        ref={captionsRef}
+                        className="mt-2 min-h-[3rem] rounded-md bg-gray-800 p-3 text-center text-lg font-medium text-white"
+                      >
+                        {/* Captions will appear here */}
                       </div>
                     </div>
-                    <p className="text-sm text-gray-600 line-clamp-2">{segment.ContextText}</p>
-                  </div>
-                ))}
+                  )}
+                  
+                  <canvas
+                    ref={canvasRef}
+                    width="400"
+                    height="100"
+                    className="w-full rounded-md border border-gray-200"
+                  />
+                </div>
+              </div>
+              
+              <div className="mt-6 flex justify-between">
+                <button
+                  type="button"
+                  onClick={() => setCurrentStep('script')}
+                  className="rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-200"
+                >
+                  Back to Script
+                </button>
+                
+                <div className="space-x-3">
+                  <button
+                    type="button"
+                    onClick={saveToDatabase}
+                    disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+                    className={`rounded-md px-4 py-2 text-sm font-medium ${
+                      saveStatus === 'saving'
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : saveStatus === 'saved'
+                        ? 'bg-green-600 text-white'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {saveStatus === 'saving'
+                      ? 'Saving...'
+                      : saveStatus === 'saved'
+                      ? 'Saved!'
+                      : 'Save'}
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={generateVideo}
+                    disabled={isLoading || saveStatus === 'saving' || saveStatus === 'idle'}
+                    className={`rounded-md px-4 py-2 text-sm font-medium ${
+                      isLoading || saveStatus === 'saving' || saveStatus === 'idle'
+                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }`}
+                  >
+                    {isLoading ? 'Generating...' : 'Generate Video'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -586,11 +743,15 @@ export default function TikTokVideoGenPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6">TikTok Content Generator</h1>
-        {renderCurrentStep()}
-      </div>
+    <div className="container mx-auto px-4 py-8 max-w-5xl">
+      <h1 className="text-2xl font-bold mb-6">TikTok Video Generator</h1>
+      
+      {renderCurrentStep()}
+      
+      <VideoHistoryModal 
+        isOpen={showVideoHistory} 
+        onClose={() => setShowVideoHistory(false)} 
+      />
     </div>
   );
 } 

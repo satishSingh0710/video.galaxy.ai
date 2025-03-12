@@ -22,8 +22,9 @@ export interface ITikTokVideo extends Document {
   createdAt: Date;
   updatedAt: Date;
   title: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'generating' | 'completed' | 'failed';
   url?: string;
+  renderId?: string;
 }
 
 // Schema for Image
@@ -95,6 +96,19 @@ const TikTokVideoSchema = new Schema<ITikTokVideo>(
         },
         message: 'Caption text cannot be empty'
       }
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'generating', 'completed', 'failed'],
+      default: 'pending'
+    },
+    url: {
+      type: String,
+      trim: true
+    },
+    renderId: {
+      type: String,
+      trim: true
     }
   },
   {
@@ -106,6 +120,7 @@ const TikTokVideoSchema = new Schema<ITikTokVideo>(
 
 // Indexes for better query performance
 TikTokVideoSchema.index({ createdAt: -1 });
+TikTokVideoSchema.index({ status: 1 });
 
 // Check if the model exists before creating it
 const TikTokVideo = mongoose.models.TikTokVideo || mongoose.model<ITikTokVideo>('TikTokVideo', TikTokVideoSchema);
