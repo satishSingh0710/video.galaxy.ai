@@ -2,9 +2,12 @@
 
 import { useState } from 'react';
 
-export default function AudioCaptionForm() {
+interface AudioCaptionFormProps {
+  onAudioUrlSubmit: (audioUrl: string) => void;
+}
+
+export default function AudioCaptionForm({ onAudioUrlSubmit }: AudioCaptionFormProps) {
   const [audioUrl, setAudioUrl] = useState('');
-  const [captions, setCaptions] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -12,25 +15,13 @@ export default function AudioCaptionForm() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    setCaptions('');
 
     try {
-      const response = await fetch('/api/tik-tok-video-gen/getcaptions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ audioUrl }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch captions');
-      }
-
-      const data = await response.json();
-      setCaptions(data.captions);
+      // Validate the URL
+      new URL(audioUrl);
+      onAudioUrlSubmit(audioUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
+      setError('Please enter a valid URL');
     } finally {
       setLoading(false);
     }
@@ -62,7 +53,7 @@ export default function AudioCaptionForm() {
           className={`w-full px-4 py-2 text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors
             ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
-          {loading ? 'Getting Captions...' : 'Get Captions'}
+          {loading ? 'Processing...' : 'Generate Video'}
         </button>
       </form>
 
@@ -71,15 +62,6 @@ export default function AudioCaptionForm() {
           {error}
         </div>
       )}
-
-      {/* {captions && (
-        <div className="mt-6">
-          <h3 className="text-lg font-semibold mb-2 dark:text-gray-200">Captions:</h3>
-          <div className="p-4 bg-gray-100 rounded-md dark:bg-gray-800 dark:text-gray-200">
-            {captions}
-          </div>
-        </div>
-      )} */}
     </div>
   );
 } 

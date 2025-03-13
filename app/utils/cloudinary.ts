@@ -277,4 +277,3 @@ export const uploadToCloudinary = async (
     throw error;
   }
 };
-

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import AudioCaptionForm from './components/AudioCaptionForm';
+import AudioCaptionForm from './(app)/(tools)/tik-tok-video-gen/components/AudioCaptionForm';
 
 export default function Home() {
   return (

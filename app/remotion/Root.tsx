@@ -14,6 +14,7 @@ export const RemotionRoot: React.FC = () => {
         height={1920}
         defaultProps={{
           audioUrl: 'https://res.cloudinary.com/drt6u2nwp/video/upload/v1741602906/audio-uploads/z9msjfmzvvfw9dkyuncs.mp3',
+          videoUrl: '',
           images: [],
           captions: [],
           captionStyle: 'default',

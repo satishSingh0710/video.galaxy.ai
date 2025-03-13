@@ -71,16 +71,10 @@ export async function POST(request: NextRequest) {
         console.log("getaudio: Starting audio generation");
         // Parse the request body
         const body = await request.json();
-        
-        // Validate body exists
-        if (!body) {
-            console.error("getaudio: Request body is missing");
-            return NextResponse.json({ error: "Request body is required" }, { status: 400 });
-        }
-
         const { text, voiceId = "BFqnCBsd6RMkjVDRZzb" } = body;
 
-        // Validate text exists before accessing its length
+        console.log(`getaudio: Processing text (${text.length} chars) with voiceId: ${voiceId}`);
+        
         if (!text) {
             console.error("getaudio: Text is required but was not provided");
             return NextResponse.json({ error: "Text is required" }, { status: 400 });
@@ -91,17 +85,26 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Voice ID is required" }, { status: 400 });
         }
         
-        console.log(`getaudio: Processing text (${text.length} chars) with voiceId: ${voiceId}`);
-        
         // Generate audio using Eleven Labs
         console.log("getaudio: Sending request to ElevenLabs");
-        const audioStream = await client.textToSpeech.convert(voiceId, {
-            output_format: "mp3_44100_128",
-            text: text, 
-            model_id: "eleven_multilingual_v2"
-        });
-
-        console.log("getaudio: Received audio stream from ElevenLabs");
+        let audioStream;
+        try {
+            audioStream = await client.textToSpeech.convert(voiceId, {
+                output_format: "mp3_44100_128",
+                text: text, 
+                model_id: "eleven_multilingual_v2"
+            });
+            console.log("getaudio: Received audio stream from ElevenLabs");
+        } catch (elevenlabsError: any) {
+            console.error("ElevenLabs API Error Details:", {
+                status: elevenlabsError.status,
+                message: elevenlabsError.message,
+                response: elevenlabsError.response,
+                text_length: text.length,
+                voice_id: voiceId
+            });
+            throw elevenlabsError;
+        }
         
         // Convert the stream to a buffer
         const audioBuffer = await streamToBuffer(audioStream);

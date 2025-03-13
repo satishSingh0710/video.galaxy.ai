@@ -23,7 +23,6 @@ interface Video {
     imageUrl: string;
   }>;
   createdAt: string;
-  url?: string;
   captions?: Array<{
     text: string;
     start: number;
@@ -186,18 +185,6 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
                             <div className="flex items-center gap-1">
                               <Calendar className="h-4 w-4" />
                               <span>{formatDate(video.createdAt)}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {video.url && (
-                                <a
-                                  href={video.url}
-                                  download
-                                  className="flex items-center gap-1 hover:text-blue-600 transition-colors"
-                                  title="Download Video"
-                                >
-                                  <Download className="h-4 w-4" />
-                                </a>
-                              )}
                             </div>
                           </div>
                         </div>

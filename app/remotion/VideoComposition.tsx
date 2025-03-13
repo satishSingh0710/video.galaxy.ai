@@ -6,11 +6,13 @@ import {
   useCurrentFrame,
   useVideoConfig,
   interpolate,
+  Video,
 } from 'remotion';
 import { Download } from 'lucide-react';
 
 interface VideoCompositionProps {
-  audioUrl: string;
+  audioUrl?: string;
+  videoUrl?: string;
   images: Array<{
     imageUrl: string;
     contextText: string;
@@ -23,6 +25,7 @@ interface VideoCompositionProps {
   }>;
   onDownload?: () => void;
   captionStyle?: 'default' | 'highlightEachWord' | 'highlightSpokenWord' | 'wordByWord';
+  isPortrait?: boolean;
 }
 
 // Define a type for caption groups
@@ -39,10 +42,12 @@ interface CaptionGroup {
 
 export const VideoComposition: React.FC<VideoCompositionProps> = ({
   audioUrl,
+  videoUrl,
   images,
   captions,
   onDownload,
   captionStyle = 'default',
+  isPortrait = false,
 }) => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames, width, height } = useVideoConfig();
@@ -183,41 +188,30 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
 
   // Calculate responsive font size based on video dimensions
   const getResponsiveFontSize = () => {
-    // Calculate base size as a percentage of the smallest dimension
-    const baseSize = Math.min(width, height) * 0.035; 
+    // For mobile (portrait orientation)
+    if (width < height) {
+      // Mobile devices need larger text relative to screen size
+      const mobileBaseSize = Math.min(width, height) * 0.045;
+      return `${Math.max(20, Math.min(mobileBaseSize, 50))}px`;
+    }
     
-    // Apply a maximum size cap for larger screens
-    const maxSize = 60; // Maximum font size in pixels
-    
-    // Apply a minimum size floor for very small screens
-    const minSize = 16; // Minimum font size in pixels
-    
-    return `${Math.max(minSize, Math.min(baseSize, maxSize))}px`;
+    // For desktop/landscape
+    const baseSize = Math.min(width, height) * 0.04; 
+    return `${Math.max(18, Math.min(baseSize, 60))}px`;
   };
 
   // Calculate responsive padding based on video dimensions
   const getResponsivePadding = () => {
-    // Calculate base padding as a percentage of the smallest dimension
-    const basePadding = Math.min(width, height) * 0.015;
-    
-    // Apply minimum and maximum constraints
-    const minPadding = 10; // Minimum padding in pixels
-    const maxPadding = 35; // Maximum padding in pixels
-    
-    const paddingValue = Math.max(minPadding, Math.min(basePadding, maxPadding));
-    
-    return `${paddingValue}px ${paddingValue * 1.4}px`;
-  };
-
-  // Calculate responsive max-width based on video dimensions
-  const getResponsiveMaxWidth = () => {
     // For mobile (portrait orientation)
     if (width < height) {
-      return '95%'; // Use more width on mobile
+      const mobilePadding = width * 0.03;
+      return `${Math.max(12, Math.min(mobilePadding, 30))}px ${Math.max(16, Math.min(mobilePadding * 1.5, 40))}px`;
     }
     
     // For desktop/landscape
-    return '80%';
+    const basePadding = Math.min(width, height) * 0.02;
+    const paddingValue = Math.max(12, Math.min(basePadding, 35));
+    return `${paddingValue}px ${paddingValue * 1.4}px`;
   };
 
   // Render caption text based on selected style with precise word timing
@@ -225,23 +219,62 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
     if (!currentGroup) return null;
     
     if (captionStyle === 'default') {
-      return currentGroup.text;
+      return (
+        <div style={{
+          color: 'white',
+          fontWeight: 600,
+          textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
+        }}>
+          {currentGroup.text}
+        </div>
+      );
     }
     
     if (captionStyle === 'wordByWord') {
       if (!currentGroup.words || currentWordIndex < 0) return null;
       
-      // Show only the current word
-      return currentWord?.text || '';
+      // Show only the current word with distinct styling
+      return (
+        <div style={{
+          color: '#FFFFFF',
+          fontWeight: 700,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          padding: '4px 8px',
+          borderRadius: '6px',
+          textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
+          transform: 'scale(1.1)',
+          transition: 'all 0.2s ease-in-out',
+        }}>
+          {currentWord?.text || ''}
+        </div>
+      );
     }
     
     if (captionStyle === 'highlightEachWord' || captionStyle === 'highlightSpokenWord') {
-      if (!currentGroup.words) return currentGroup.text;
+      if (!currentGroup.words || currentGroup.words.length === 0) {
+        // Fallback to default style if no words
+        return (
+          <div style={{
+            color: 'white',
+            fontWeight: 600,
+            textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
+          }}>
+            {currentGroup.text}
+          </div>
+        );
+      }
+      
+      const words = currentGroup.words;
       
       return (
-        <>
-          {currentGroup.words?.map((word, index) => {
-            // For highlightEachWord, highlight all words
+        <div style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          gap: '4px',
+        }}>
+          {words.map((word, index) => {
+            // For highlightEachWord, highlight all words but with different styling
             // For highlightSpokenWord, only highlight the current word
             const isHighlighted = 
               captionStyle === 'highlightEachWord' 
@@ -249,136 +282,223 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
                 : (currentWord && word.text === currentWord.text && 
                    word.start === currentWord.start && word.end === currentWord.end);
             
+            // Different styling for each mode
+            const highlightColor = captionStyle === 'highlightEachWord' ? '#FFFFFF' : '#FFDD00';
+            const highlightBg = captionStyle === 'highlightEachWord' 
+              ? 'rgba(255, 255, 255, 0.1)' 
+              : 'rgba(255, 221, 0, 0.2)';
+            const textShadowColor = captionStyle === 'highlightEachWord'
+              ? 'rgba(255, 255, 255, 0.8)'
+              : 'rgba(255, 221, 0, 0.8)';
+            
             return (
-              <React.Fragment key={index}>
-                <span
-                  style={{
-                    color: isHighlighted ? '#FFD700' : 'white',
-                    fontWeight: isHighlighted ? 'bold' : 'normal',
-                    textShadow: isHighlighted 
-                      ? '0 2px 8px rgba(255, 215, 0, 0.7)' 
-                      : '0 2px 8px rgba(0, 0, 0, 0.7)',
-                  }}
-                >
-                  {word.text}
-                </span>
-                {index < (currentGroup.words?.length || 0) - 1 ? ' ' : ''}
-              </React.Fragment>
+              <span
+                key={index}
+                style={{
+                  color: isHighlighted ? highlightColor : 'white',
+                  fontWeight: isHighlighted ? 'bold' : 'normal',
+                  textShadow: isHighlighted 
+                    ? `0 2px 8px ${textShadowColor}` 
+                    : '0 2px 4px rgba(0, 0, 0, 0.7)',
+                  padding: isHighlighted ? '0px 0px' : '0px 0px',
+                  borderRadius: isHighlighted ? '4px' : '0',
+                  backgroundColor: isHighlighted ? highlightBg : 'transparent',
+                  transition: 'all 0.15s ease-in-out',
+                  display: 'inline-block',
+                  transform: isHighlighted && captionStyle === 'highlightSpokenWord' ? 'scale(1.05)' : 'scale(1)',
+                }}
+              >
+                {word.text}
+              </span>
             );
           })}
+        </div>
+      );
+    }
+    
+    // Fallback to plain text if no style matches
+    return currentGroup.text;
+  };
+
+  // Render function for the media content
+  const renderMedia = () => {
+    // If video is provided, render it
+    if (videoUrl) {
+      return (
+        <>
+          <Video
+            src={videoUrl}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: isPortrait ? 'contain' : 'cover',
+            }}
+          />
+          {/* If both video and audio are provided, render audio as well */}
+          {audioUrl && (
+            <Audio src={audioUrl} />
+          )}
         </>
       );
     }
     
-    return currentGroup.text;
-  };
-
-  // Calculate which image to show based on time
-  const segmentDuration = durationInFrames / (images.length || 1);
-  const currentImageIndex = Math.floor(frame / segmentDuration);
-  const currentImage = images[Math.min(currentImageIndex, images.length - 1)];
-
-  // Simple image opacity without animation
-  const imageOpacity = 1;
-
-  return (
-    <AbsoluteFill style={{ backgroundColor: 'black' }}>
-      {/* Background Image */}
-      <AbsoluteFill
-        style={{
-          opacity: imageOpacity,
-        }}
-      >
-        {currentImage && (
-          <img
-            src={currentImage.imageUrl}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
-            alt={currentImage.contextText}
-          />
-        )}
-      </AbsoluteFill>
-
-      {/* Social Media Style Captions - Centered */}
-      <AbsoluteFill
-        style={{
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '0 10px', // Reduced side padding for mobile
-          zIndex: 1000,
-        }}
-      >
-        {/* Current caption group - no animations */}
-        {currentGroup && (
-          <div
-            style={{
-              position: 'relative',
-              maxWidth: getResponsiveMaxWidth(),
-              width: 'auto',
-              backgroundColor: 'rgba(0, 0, 0, 0.8)',
-              padding: getResponsivePadding(),
-              borderRadius: '16px',
-              boxShadow: '0 4px 30px rgba(0, 0, 0, 0.5)',
-              opacity: 1, // Full opacity, no animation
-            }}
-          >
-            <p
+    // If only audio is provided, render audio with images
+    if (audioUrl) {
+      return (
+        <>
+          <Audio src={audioUrl} />
+          {/* Render images if available */}
+          {images.length > 0 ? (
+            // Your existing image rendering code
+            images.map((image, index) => (
+              <Sequence
+                key={index}
+                from={Math.floor(index * durationInFrames / images.length)}
+                durationInFrames={Math.floor(durationInFrames / images.length)}
+              >
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    backgroundColor: '#000',
+                  }}
+                >
+                  <img
+                    src={image.imageUrl}
+                    alt={image.contextText}
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'contain',
+                    }}
+                  />
+                </div>
+              </Sequence>
+            ))
+          ) : (
+            // If no images, show a placeholder
+            <div
               style={{
-                color: 'white',
-                fontSize: getResponsiveFontSize(),
-                fontWeight: 'bold',
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                backgroundColor: '#000',
+                color: '#fff',
+                fontSize: '2rem',
                 textAlign: 'center',
-                margin: 0,
-                lineHeight: 1.3,
-                letterSpacing: '0.01em',
-                textShadow: '0 2px 8px rgba(0, 0, 0, 0.7)',
-                fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                wordBreak: 'break-word',
-                overflowWrap: 'break-word',
+                padding: '2rem',
               }}
             >
-              {renderCaptionText()}
-            </p>
+              Audio Visualization
+            </div>
+          )}
+        </>
+      );
+    }
+    
+    return null;
+  };
+
+  // Calculate responsive bottom position based on video orientation
+  const getResponsiveBottomPosition = () => {
+    if (isPortrait) {
+      // For portrait videos, position captions higher up
+      return '15%';
+    }
+    
+    const basePosition = Math.min(width, height) * 0.05;
+    const minPosition = 20;
+    const maxPosition = 60;
+    
+    return `${Math.max(minPosition, Math.min(basePosition, maxPosition))}px`;
+  };
+
+  // Calculate responsive max-width based on video orientation
+  const getResponsiveMaxWidth = () => {
+    // For portrait videos, use more width
+    if (isPortrait) {
+      return '90%';
+    }
+    
+    // For mobile (portrait orientation)
+    if (width < height) {
+      return '85%'; // Use more width on mobile but not too much
+    }
+    
+    // For desktop/landscape
+    return '75%';
+  };
+
+  // Return the composition with AbsoluteFill to ensure proper rendering
+  return (
+    <AbsoluteFill style={{ 
+      backgroundColor: 'black',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <div style={{
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+      }}>
+        {renderMedia()}
+        
+        {/* Caption container with responsive positioning */}
+        {currentGroup && (
+          <div style={{
+            position: 'absolute',
+            bottom: getResponsiveBottomPosition(),
+            left: '50%',
+            transform: 'translateX(-50%)',
+            maxWidth: getResponsiveMaxWidth(),
+            backgroundColor: 'rgba(0, 0, 0, 0.6)',
+            borderRadius: '8px',
+            padding: getResponsivePadding(),
+            fontSize: getResponsiveFontSize(),
+            textAlign: 'center',
+            zIndex: 10,
+          }}>
+            {renderCaptionText()}
           </div>
         )}
-      </AbsoluteFill>
-
-      {/* Download Button - Responsive positioning */}
-      {onDownload && (
-        <div
-          style={{
+        
+        {/* Download button if provided */}
+        {onDownload && (
+          <div style={{
             position: 'absolute',
-            bottom: '20px',
+            top: '20px',
             right: '20px',
-            zIndex: 2000,
-          }}
-        >
-          <button
-            onClick={onDownload}
-            style={{
-              backgroundColor: '#3B82F6',
-              color: 'white',
-              border: 'none',
-              borderRadius: '50%',
-              width: width < 480 ? '36px' : '48px', // Smaller on mobile
-              height: width < 480 ? '36px' : '48px', // Smaller on mobile
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <Download size={width < 480 ? 18 : 24} />
-          </button>
-        </div>
-      )}
-
-      {/* Audio Track */}
-      <Audio src={audioUrl} />
+            zIndex: 20,
+          }}>
+            <button
+              onClick={onDownload}
+              style={{
+                backgroundColor: 'white',
+                color: 'black',
+                border: 'none',
+                borderRadius: '50%',
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <Download size={20} />
+            </button>
+          </div>
+        )}
+      </div>
     </AbsoluteFill>
   );
 }; 

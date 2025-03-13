@@ -1,6 +1,8 @@
 "use client"
 import React, { useState, useRef, useEffect } from 'react';
-import VoiceSelector from '../../../components/VoiceSelector';
+import Image from 'next/image';
+import VoiceSelector  from './components/VoiceSelector';
+import VideoHistoryModal from './components/VideoHistoryModal';
 
 
 interface ScriptSegment {
@@ -32,7 +34,6 @@ export default function TikTokVideoGenPage() {
   const [text, setText] = useState<string>('');
   const [selectedVoice, setSelectedVoice] = useState<string>('');
   const [selectedPreset, setSelectedPreset] = useState<ImagePreset>('realistic');
-  const [voiceSpeed, setVoiceSpeed] = useState<number>(1.0);
   const [scriptSegments, setScriptSegments] = useState<ScriptSegment[]>([]);
   const [currentStep, setCurrentStep] = useState<'script' | 'processing' | 'review'>('script');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -41,6 +42,7 @@ export default function TikTokVideoGenPage() {
   const [fullAudioUrl, setFullAudioUrl] = useState<string | null>(null);
   const [allWords, setAllWords] = useState<Array<{text: string, start: number, end: number}>>([]);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState<boolean>(false);
   
   // Refs for client-side rendering
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -53,10 +55,6 @@ export default function TikTokVideoGenPage() {
 
   const handleVoiceSelect = (voiceId: string) => {
     setSelectedVoice(voiceId);
-  };
-
-  const handleVoiceSpeedChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVoiceSpeed(parseFloat(e.target.value));
   };
 
   const processScript = async () => {
@@ -103,8 +101,7 @@ export default function TikTokVideoGenPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text,
-          voiceId: selectedVoice,
-          speed: voiceSpeed
+          voiceId: selectedVoice
         }),
       });
 
@@ -370,26 +367,6 @@ export default function TikTokVideoGenPage() {
             <VoiceSelector onVoiceSelect={handleVoiceSelect} selectedVoice={selectedVoice} />
 
             <div className="space-y-2">
-              <label htmlFor="voiceSpeed" className="block text-sm font-medium text-gray-700">
-                Voice Speed: {voiceSpeed.toFixed(1)}x
-              </label>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-500">0.7x</span>
-                <input
-                  id="voiceSpeed"
-                  type="range"
-                  min="0.7"
-                  max="1.2"
-                  step="0.1"
-                  value={voiceSpeed}
-                  onChange={handleVoiceSpeedChange}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
-                />
-                <span className="text-xs text-gray-500">1.2x</span>
-              </div>
-            </div>
-
-            <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
                 Select Image Style
               </label>
@@ -588,9 +565,37 @@ export default function TikTokVideoGenPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-md p-6">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800 mb-6">TikTok Content Generator</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-800">TikTok Content Generator</h1>
+          <button 
+            onClick={() => setIsHistoryModalOpen(true)} 
+            className="mt-2 sm:mt-0 inline-flex items-center justify-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-colors font-medium text-sm"
+          >
+            <svg 
+              className="w-4 h-4 mr-2" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24" 
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path 
+                strokeLinecap="round" 
+                strokeLinejoin="round" 
+                strokeWidth={2} 
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" 
+              />
+            </svg>
+            Videos History
+          </button>
+        </div>
         {renderCurrentStep()}
       </div>
+      
+      {/* Videos History Modal */}
+      <VideoHistoryModal 
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+      />
     </div>
   );
 } 
