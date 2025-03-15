@@ -7,8 +7,9 @@ import {
   useVideoConfig,
   interpolate,
   Video,
+  spring,
+  random,
 } from 'remotion';
-import { Download } from 'lucide-react';
 
 interface VideoCompositionProps {
   audioUrl?: string;
@@ -23,482 +24,628 @@ interface VideoCompositionProps {
     end: number;   // in milliseconds
     _id?: string;
   }>;
-  onDownload?: () => void;
-  captionStyle?: 'default' | 'highlightEachWord' | 'highlightSpokenWord' | 'wordByWord';
   isPortrait?: boolean;
-}
-
-// Define a type for caption groups
-interface CaptionGroup {
-  text: string;
-  start: number;
-  end: number;
-  words?: Array<{
-    text: string;
-    start: number;
-    end: number;
-  }>;
+  captionPreset?: 'BASIC' | 'REVID' | 'HORMOZI' | 'WRAP 1' | 'WRAP 2' | 'FACELESS' | 'ALL';
+  captionAlignment?: 'top' | 'middle' | 'bottom';
+  disableCaptions?: boolean;
+  screenRatio?: '1/1' | '16/9' | '9/16' | 'auto';
+  imageAnimation?: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | 'ken-burns' | 'subtle-pulse' | 'random' | 'slow-fullscreen-zoom';
 }
 
 export const VideoComposition: React.FC<VideoCompositionProps> = ({
   audioUrl,
   videoUrl,
-  images,
-  captions,
-  onDownload,
-  captionStyle = 'default',
+  images = [],
+  captions = [],
   isPortrait = false,
+  captionPreset = 'BASIC',
+  captionAlignment = 'middle',
+  disableCaptions = false,
+  screenRatio = 'auto',
+  imageAnimation = 'none',
 }) => {
   const frame = useCurrentFrame();
-  const { fps, durationInFrames, width, height } = useVideoConfig();
+  const { fps, width, height } = useVideoConfig();
 
-  // Calculate the current time in milliseconds with more precision
-  const currentTimeInMs = Math.floor((frame / fps) * 1000);
-
-  // Constants for timing adjustments - no delays or buffers
-  const TIMING_OFFSET = 0; // No offset
-  const DISPLAY_BUFFER = 0; // No buffer
-  const MIN_DISPLAY_TIME = 0; // No minimum display time
-  const PAUSE_THRESHOLD = 100; // Minimal threshold for detecting pauses
-
-  // Pre-process captions to extract word-level timing
-  const processedCaptions = useMemo(() => {
-    // First, ensure each caption has the correct timing
-    return captions.map(caption => {
-      // Calculate word positions based on caption duration
-      const words = caption.text.trim().split(/\s+/);
-      const wordCount = words.length;
-      const captionDuration = caption.end - caption.start;
-      const wordDuration = wordCount > 0 ? captionDuration / wordCount : captionDuration;
-      
-      // Create word-level timing data with exact timing
-      const wordTimings = words.map((word, index) => {
-        const wordStart = caption.start + (index * wordDuration);
-        const wordEnd = index === wordCount - 1 
-          ? caption.end 
-          : caption.start + ((index + 1) * wordDuration);
-        
-        return {
-          text: word,
-          start: wordStart,
-          end: wordEnd
-        };
-      });
-      
+  // Calculate aspect ratio container dimensions
+  const containerDimensions = useMemo(() => {
+    if (screenRatio === 'auto') {
+      return { width: '100%', height: '100%' };
+    }
+    
+    let aspectRatio: number;
+    switch (screenRatio) {
+      case '1/1':
+        aspectRatio = 1;
+        break;
+      case '16/9':
+        aspectRatio = 16/9;
+        break;
+      case '9/16':
+        aspectRatio = 9/16;
+        break;
+      default:
+        aspectRatio = isPortrait ? 9/16 : 16/9;
+    }
+    
+    if (width / height > aspectRatio) {
+      // Container is wider than desired ratio
+      const newWidth = height * aspectRatio;
       return {
-        ...caption,
-        words: wordTimings,
-        // Use exact timing with no offsets
-        adjustedStart: caption.start,
-        adjustedEnd: caption.end
+        width: newWidth,
+        height: height,
+        left: (width - newWidth) / 2,
+        top: 0,
       };
-    });
-  }, [captions]);
+    } else {
+      // Container is taller than desired ratio
+      const newHeight = width / aspectRatio;
+      return {
+        width: width,
+        height: newHeight,
+        left: 0,
+        top: (height - newHeight) / 2,
+      };
+    }
+  }, [width, height, screenRatio, isPortrait]);
 
-  // Group captions into semantic chunks with precise word timing
-  const captionGroups = useMemo(() => {
-    if (!processedCaptions || processedCaptions.length === 0) return [];
+  // Calculate current time in milliseconds
+  const currentTime = (frame / fps) * 1000;
+  
+  /**
+   * Gets the current caption to display based on the current frame time
+   * @returns The current caption or a preview caption if no current caption exists
+   */
+  const getCurrentCaptions = () => {
+    // Return null if captions are disabled
+    if (disableCaptions) return null;
     
-    const groups: CaptionGroup[] = [];
-    let currentGroup: typeof processedCaptions = [];
-    let groupStartTime = 0;
-    let groupEndTime = 0;
-    let wordCount = 0;
-    let groupWords: Array<{text: string, start: number, end: number}> = [];
-    
-    processedCaptions.forEach((caption, index) => {
-      const words = caption.text.trim().split(/\s+/);
-      const newWordCount = wordCount + words.length;
+    // Cache caption groups to ensure stability
+    const memoizedCaptionGroups = React.useMemo(() => {
+      // Group captions into distinct chunks for display
+      const groups: Array<{
+        text: string;
+        start: number;
+        end: number;
+        isPreview?: boolean;
+        wordCount: number;
+        id: string; // Add a stable ID for each group
+      }> = [];
       
-      const isFirstCaption = index === 0;
-      const wouldExceedLimit = newWordCount > 4; // Limit groups to 4 words for readability
-      const hasSignificantPause = caption.start > groupEndTime + PAUSE_THRESHOLD;
-      const isLastCaption = index === processedCaptions.length - 1;
+      if (captions.length === 0) return groups;
       
-      if (isFirstCaption || wouldExceedLimit || hasSignificantPause) {
-        if (currentGroup.length > 0) {
-          const duration = groupEndTime - groupStartTime;
+      // Sort captions by start time
+      const sortedCaptions = [...captions].sort((a, b) => a.start - b.start);
+      
+      // Create caption groups with a maximum of words that would result in 3-4 words per visual group
+      let currentGroup: typeof sortedCaptions = [];
+      let currentWordCount = 0;
+      const MAX_WORDS_PER_GROUP = 4; // This ensures we get around 3 visual groups of 4 words each
+      let groupId = 0;
+      
+      for (const caption of sortedCaptions) {
+        // If adding this caption would exceed our word limit, finish the current group
+        const captionWordCount = caption.text.split(' ').filter(Boolean).length;
+        
+        if (currentWordCount + captionWordCount > MAX_WORDS_PER_GROUP && currentGroup.length > 0) {
+          // Use the start time of the first caption and end time of the last caption in the group
+          const firstCaptionStart = currentGroup[0].start;
+          const lastCaptionEnd = Math.max(...currentGroup.map(c => c.end));
           
+          // Create a new group with the combined text
           groups.push({
             text: currentGroup.map(c => c.text).join(' '),
-            start: groupStartTime,
-            end: groupEndTime, // Use exact end time with no adjustments
-            words: groupWords
+            start: firstCaptionStart,
+            end: lastCaptionEnd,
+            wordCount: currentWordCount,
+            id: `group-${groupId++}` // Use a stable ID to prevent re-renders
           });
+          
+          // Start a new group
+          currentGroup = [];
+          currentWordCount = 0;
         }
         
-        currentGroup = [caption];
-        groupStartTime = caption.start;
-        groupEndTime = caption.end;
-        wordCount = words.length;
-        groupWords = caption.words || [];
-      } else {
+        // Add the caption to the current group
         currentGroup.push(caption);
-        groupEndTime = caption.end;
-        wordCount = newWordCount;
-        groupWords = groupWords.concat(caption.words || []);
+        currentWordCount += captionWordCount;
       }
-
-      // Handle the last group
-      if (isLastCaption && currentGroup.length > 0) {
-        const duration = groupEndTime - groupStartTime;
+      
+      // Add the final group if there's anything left
+      if (currentGroup.length > 0) {
+        const firstCaptionStart = currentGroup[0].start;
+        const lastCaptionEnd = Math.max(...currentGroup.map(c => c.end));
         
         groups.push({
           text: currentGroup.map(c => c.text).join(' '),
-          start: groupStartTime,
-          end: groupEndTime, // Use exact end time with no adjustments
-          words: groupWords
+          start: firstCaptionStart,
+          end: lastCaptionEnd,
+          wordCount: currentWordCount,
+          id: `group-${groupId++}`
         });
       }
-    });
+      
+      return groups;
+    }, [captions]);
     
-    return groups;
-  }, [processedCaptions]);
-
-  // Find current caption group with exact timing - no buffer
-  const currentGroup = captionGroups.find(
-    group => currentTimeInMs >= group.start && currentTimeInMs <= group.end
-  );
-
-  // Find the current word being spoken with exact timing
-  const getCurrentWord = () => {
-    if (!currentGroup || !currentGroup.words || currentGroup.words.length === 0) {
-      return null;
-    }
-    
-    // Find the word that matches the current time exactly
-    return currentGroup.words.find(word => 
-      currentTimeInMs >= word.start && currentTimeInMs <= word.end
+    // Find the current caption group based on the current time
+    const currentGroup = memoizedCaptionGroups.find(
+      group => currentTime >= group.start && currentTime <= group.end
     );
-  };
-
-  const currentWord = getCurrentWord();
-  
-  // Find the index of the current word in the group
-  const getCurrentWordIndex = () => {
-    if (!currentGroup || !currentGroup.words || !currentWord) return -1;
     
-    return currentGroup.words.findIndex(word => 
-      word.text === currentWord.text && 
-      word.start === currentWord.start
+    if (currentGroup) {
+      return currentGroup;
+    }
+    
+    // If no current group, look for the next upcoming group as a preview
+    const nextGroup = memoizedCaptionGroups.find(
+      group => currentTime < group.start && group.start <= currentTime + 1000
     );
-  };
-
-  const currentWordIndex = getCurrentWordIndex();
-
-  // Calculate responsive font size based on video dimensions
-  const getResponsiveFontSize = () => {
-    // For mobile (portrait orientation)
-    if (width < height) {
-      // Mobile devices need larger text relative to screen size
-      const mobileBaseSize = Math.min(width, height) * 0.045;
-      return `${Math.max(20, Math.min(mobileBaseSize, 50))}px`;
-    }
     
-    // For desktop/landscape
-    const baseSize = Math.min(width, height) * 0.04; 
-    return `${Math.max(18, Math.min(baseSize, 60))}px`;
-  };
-
-  // Calculate responsive padding based on video dimensions
-  const getResponsivePadding = () => {
-    // For mobile (portrait orientation)
-    if (width < height) {
-      const mobilePadding = width * 0.03;
-      return `${Math.max(12, Math.min(mobilePadding, 30))}px ${Math.max(16, Math.min(mobilePadding * 1.5, 40))}px`;
-    }
-    
-    // For desktop/landscape
-    const basePadding = Math.min(width, height) * 0.02;
-    const paddingValue = Math.max(12, Math.min(basePadding, 35));
-    return `${paddingValue}px ${paddingValue * 1.4}px`;
-  };
-
-  // Render caption text based on selected style with precise word timing
-  const renderCaptionText = () => {
-    if (!currentGroup) return null;
-    
-    if (captionStyle === 'default') {
-      return (
-        <div style={{
-          color: 'white',
-          fontWeight: 600,
-          textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
-        }}>
-          {currentGroup.text}
-        </div>
-      );
-    }
-    
-    if (captionStyle === 'wordByWord') {
-      if (!currentGroup.words || currentWordIndex < 0) return null;
-      
-      // Show only the current word with distinct styling
-      return (
-        <div style={{
-          color: '#FFFFFF',
-          fontWeight: 700,
-          backgroundColor: 'rgba(0, 0, 0, 0.5)',
-          padding: '4px 8px',
-          borderRadius: '6px',
-          textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
-          transform: 'scale(1.1)',
-          transition: 'all 0.2s ease-in-out',
-        }}>
-          {currentWord?.text || ''}
-        </div>
-      );
-    }
-    
-    if (captionStyle === 'highlightEachWord' || captionStyle === 'highlightSpokenWord') {
-      if (!currentGroup.words || currentGroup.words.length === 0) {
-        // Fallback to default style if no words
-        return (
-          <div style={{
-            color: 'white',
-            fontWeight: 600,
-            textShadow: '0 2px 4px rgba(0, 0, 0, 0.8)',
-          }}>
-            {currentGroup.text}
-          </div>
-        );
-      }
-      
-      const words = currentGroup.words;
-      
-      return (
-        <div style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-          gap: '4px',
-        }}>
-          {words.map((word, index) => {
-            // For highlightEachWord, highlight all words but with different styling
-            // For highlightSpokenWord, only highlight the current word
-            const isHighlighted = 
-              captionStyle === 'highlightEachWord' 
-                ? true 
-                : (currentWord && word.text === currentWord.text && 
-                   word.start === currentWord.start && word.end === currentWord.end);
-            
-            // Different styling for each mode
-            const highlightColor = captionStyle === 'highlightEachWord' ? '#FFFFFF' : '#FFDD00';
-            const highlightBg = captionStyle === 'highlightEachWord' 
-              ? 'rgba(255, 255, 255, 0.1)' 
-              : 'rgba(255, 221, 0, 0.2)';
-            const textShadowColor = captionStyle === 'highlightEachWord'
-              ? 'rgba(255, 255, 255, 0.8)'
-              : 'rgba(255, 221, 0, 0.8)';
-            
-            return (
-              <span
-                key={index}
-                style={{
-                  color: isHighlighted ? highlightColor : 'white',
-                  fontWeight: isHighlighted ? 'bold' : 'normal',
-                  textShadow: isHighlighted 
-                    ? `0 2px 8px ${textShadowColor}` 
-                    : '0 2px 4px rgba(0, 0, 0, 0.7)',
-                  padding: isHighlighted ? '0px 0px' : '0px 0px',
-                  borderRadius: isHighlighted ? '4px' : '0',
-                  backgroundColor: isHighlighted ? highlightBg : 'transparent',
-                  transition: 'all 0.15s ease-in-out',
-                  display: 'inline-block',
-                  transform: isHighlighted && captionStyle === 'highlightSpokenWord' ? 'scale(1.05)' : 'scale(1)',
-                }}
-              >
-                {word.text}
-              </span>
-            );
-          })}
-        </div>
-      );
-    }
-    
-    // Fallback to plain text if no style matches
-    return currentGroup.text;
-  };
-
-  // Render function for the media content
-  const renderMedia = () => {
-    // If video is provided, render it
-    if (videoUrl) {
-      return (
-        <>
-          <Video
-            src={videoUrl}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: isPortrait ? 'contain' : 'cover',
-            }}
-          />
-          {/* If both video and audio are provided, render audio as well */}
-          {audioUrl && (
-            <Audio src={audioUrl} />
-          )}
-        </>
-      );
-    }
-    
-    // If only audio is provided, render audio with images
-    if (audioUrl) {
-      return (
-        <>
-          <Audio src={audioUrl} />
-          {/* Render images if available */}
-          {images.length > 0 ? (
-            // Your existing image rendering code
-            images.map((image, index) => (
-              <Sequence
-                key={index}
-                from={Math.floor(index * durationInFrames / images.length)}
-                durationInFrames={Math.floor(durationInFrames / images.length)}
-              >
-                <div
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    backgroundColor: '#000',
-                  }}
-                >
-                  <img
-                    src={image.imageUrl}
-                    alt={image.contextText}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'contain',
-                    }}
-                  />
-                </div>
-              </Sequence>
-            ))
-          ) : (
-            // If no images, show a placeholder
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                backgroundColor: '#000',
-                color: '#fff',
-                fontSize: '2rem',
-                textAlign: 'center',
-                padding: '2rem',
-              }}
-            >
-              Audio Visualization
-            </div>
-          )}
-        </>
-      );
+    if (nextGroup) {
+      return {
+        ...nextGroup,
+        isPreview: true,
+      };
     }
     
     return null;
   };
+  
+  // Get the caption to display
+  const displayCaption = getCurrentCaptions();
+  
+  // Add a visual indicator for preview captions
+  const isPreviewCaption = displayCaption?.isPreview || false;
 
-  // Calculate responsive bottom position based on video orientation
-  const getResponsiveBottomPosition = () => {
-    if (isPortrait) {
-      // For portrait videos, position captions higher up
-      return '15%';
+  // Debug the current caption
+  React.useEffect(() => {
+    if (displayCaption) {
+      console.log('Current caption group:', displayCaption);
     }
-    
-    const basePosition = Math.min(width, height) * 0.05;
-    const minPosition = 20;
-    const maxPosition = 60;
-    
-    return `${Math.max(minPosition, Math.min(basePosition, maxPosition))}px`;
-  };
+  }, [frame, displayCaption]);
 
-  // Calculate responsive max-width based on video orientation
-  const getResponsiveMaxWidth = () => {
-    // For portrait videos, use more width
-    if (isPortrait) {
-      return '90%';
+  // Use memo to store the previous caption to enable crossfade
+  const [prevCaption, setPrevCaption] = React.useState<typeof displayCaption>(null);
+  
+  // Track previous and current caption for crossfade effect
+  React.useEffect(() => {
+    if (displayCaption && (!prevCaption || displayCaption.id !== prevCaption.id)) {
+      setPrevCaption(displayCaption);
     }
-    
-    // For mobile (portrait orientation)
-    if (width < height) {
-      return '85%'; // Use more width on mobile but not too much
-    }
-    
-    // For desktop/landscape
-    return '75%';
-  };
+  }, [displayCaption?.id]);
 
-  // Return the composition with AbsoluteFill to ensure proper rendering
-  return (
-    <AbsoluteFill style={{ 
-      backgroundColor: 'black',
+  // Get caption style based on preset
+  const getCaptionStyle = (preset: VideoCompositionProps['captionPreset']) => {
+    // Default styles
+    const baseStyle = {
+      position: 'absolute',
+      width: '100%',
+      textAlign: 'center',
+      fontSize: '3.9rem',
+      fontWeight: 600,
+      padding: '1rem',
+      zIndex: 10,
       display: 'flex',
-      alignItems: 'center',
+      flexWrap: 'wrap',
       justifyContent: 'center',
-    }}>
-      <div style={{
-        width: '100%',
-        height: '100%',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        position: 'relative',
-      }}>
-        {renderMedia()}
-        
-        {/* Caption container with responsive positioning */}
-        {currentGroup && (
-          <div style={{
-            position: 'absolute',
-            bottom: getResponsiveBottomPosition(),
-            left: '50%',
-            transform: 'translateX(-50%)',
-            maxWidth: getResponsiveMaxWidth(),
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            borderRadius: '8px',
-            padding: getResponsivePadding(),
-            fontSize: getResponsiveFontSize(),
-            textAlign: 'center',
-            zIndex: 10,
+      gap: '0.5rem',
+      maxWidth: '90%',
+      margin: '0 auto',
+      left: '5%',
+      right: '5%',
+    } as const;
+
+    // Alignment styles - fixed to avoid duplicate properties
+    let alignmentStyle = {};
+    if (captionAlignment === 'top') {
+      alignmentStyle = { top: '25px' };
+    } else if (captionAlignment === 'bottom') {
+      alignmentStyle = { bottom: '25px' };
+    } else if (captionAlignment === 'middle') {
+      alignmentStyle = { top: '50%', transform: 'translateY(-50%)' };
+    }
+
+    // Preset-specific styles
+    switch (preset) {
+      case 'BASIC':
+        return {
+          ...baseStyle,
+          ...alignmentStyle,
+          color: 'white',
+          textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
+        };
+      case 'REVID':
+        return {
+          ...baseStyle,
+          ...alignmentStyle,
+          color: 'white',
+          textShadow: '2px 2px 0px #000000',
+          letterSpacing: '1px',
+        };
+      case 'HORMOZI':
+        return {
+          ...baseStyle,
+          ...alignmentStyle,
+          color: '#FFFF00',
+          textShadow: '2px 2px 0px rgba(0, 0, 0, 0.8)',
+          fontWeight: 700,
+        };
+      case 'WRAP 1':
+        return {
+          ...baseStyle,
+          ...alignmentStyle,
+          color: 'white',
+          minWidth: '30%', 
+          maxWidth: 'min(95%, fit-content)',
+          margin: '0 auto',
+        };
+      case 'WRAP 2':
+        return {
+          ...baseStyle,
+          ...alignmentStyle,
+          color: 'white',
+          maxWidth: 'min(80%, fit-content)',
+          minWidth: '30%',
+          margin: '0 auto',
+        };
+      case 'FACELESS':
+        return {
+          ...baseStyle,
+          ...alignmentStyle,
+          color: 'white',
+          textShadow: '0 0 10px rgba(255, 255, 255, 0.5)',
+          letterSpacing: '2px',
+          fontWeight: 300,
+        };
+      case 'ALL':
+        return {
+          ...baseStyle,
+          ...alignmentStyle,
+          color: 'white',
+          textShadow: '2px 2px 0px rgba(0, 0, 0, 0.8)',
+          fontWeight: 700,
+        };
+      default:
+        return {
+          ...baseStyle,
+          ...alignmentStyle,
+          color: 'white',
+          textShadow: '2px 2px 4px rgba(0, 0, 0, 0.8)',
+        };
+    }
+  };
+
+  // Render the caption text based on selected animation style
+  const renderCaptionText = (text: string, captionData: typeof displayCaption) => {
+    if (!captionData) return null;
+    
+    const frameInMs = (frame / fps) * 1000;
+    const elapsedTime = frameInMs - captionData.start;
+    const captionDuration = captionData.end - captionData.start;
+
+    // Guard against empty or undefined text
+    if (!text || text.trim() === '') return null;
+    
+    // Split the text into words
+    const words = text.trim().split(' ').filter(Boolean);
+    
+    // Set very fast fade in and a bit longer fade out - the key is to limit animations
+    const fadeInMs = 80; // ms for fade in - very quick
+    const fadeOutMs = 150; // ms for fade out - quick but noticeable
+    
+    // Create a simple step-based opacity function to reduce jitter
+    const getOpacity = () => {
+      // For preview captions, use a gentle pulse
+      if (captionData.isPreview) {
+        return 0.8;
+      }
+      
+      // For normal captions, handle fade in/out
+      if (elapsedTime < 0) return 0;
+      if (elapsedTime < fadeInMs) return 1; // Remove fade-in to reduce flickering
+      if (elapsedTime > captionDuration - fadeOutMs) {
+        return Math.max(0, 1 - (elapsedTime - (captionDuration - fadeOutMs)) / fadeOutMs);
+      }
+      return 1;
+    };
+    
+    // Use a calculated opacity value
+    const opacity = getOpacity();
+    
+    // Get background color based on the preset
+    const getBackgroundColor = () => {
+      if (captionPreset === 'WRAP 1') {
+        return 'rgba(255, 85, 75, 0.9)';
+      } else if (captionPreset === 'WRAP 2') {
+        return 'rgba(88, 172, 240, 0.9)';
+      } else {
+        return 'rgba(0, 0, 0, 0.6)';
+      }
+    };
+    
+    // If there are fewer than 4 words, just show them all together
+    if (words.length <= 4) {
+      return (
+        <div 
+          key={captionData.id} // Use stable ID from caption
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            width: '100%',
+            opacity: opacity,
+            // Use hardware acceleration to reduce flickering
+            transform: 'translateZ(0)',
+            willChange: 'opacity',
+          }}
+        >
+          <span style={{
+            display: 'inline-block',
+            backgroundColor: getBackgroundColor(),
+            padding: captionPreset.includes('WRAP') ? '0.3rem 1rem' : '0.3rem 1rem',
+            margin: '0.2rem',
+            borderRadius: '4px',
+            lineHeight: '1.3',
           }}>
-            {renderCaptionText()}
-          </div>
-        )}
-        
-        {/* Download button if provided */}
-        {onDownload && (
-          <div style={{
-            position: 'absolute',
-            top: '20px',
-            right: '20px',
-            zIndex: 20,
-          }}>
-            <button
-              onClick={onDownload}
-              style={{
-                backgroundColor: 'white',
-                color: 'black',
-                border: 'none',
-                borderRadius: '50%',
-                width: '40px',
-                height: '40px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-              }}
-            >
-              <Download size={20} />
-            </button>
-          </div>
-        )}
+            {words.join(' ')}
+          </span>
+        </div>
+      );
+    }
+    
+    // Group words into chunks of 4 words maximum
+    const wordGroups: string[] = [];
+    const wordsPerGroup = 4; // Maximum 4 words per group
+    
+    for (let i = 0; i < words.length; i += wordsPerGroup) {
+      const group = words.slice(i, Math.min(i + wordsPerGroup, words.length)).join(' ');
+      wordGroups.push(group);
+    }
+    
+    // Style for each word group
+    const wordGroupStyle: React.CSSProperties = {
+      display: 'inline-block',
+      backgroundColor: getBackgroundColor(),
+      padding: '0.3rem 1rem',
+      margin: '0.2rem',
+      borderRadius: '4px',
+      lineHeight: '1.3',
+      maxWidth: '100%',
+      textAlign: 'center',
+    };
+    
+    // Return the styled word groups as JSX
+    return (
+      <div 
+        key={captionData.id} // Use stable ID from caption
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          alignItems: 'center',
+          width: '100%',
+          textAlign: 'center',
+          opacity: opacity,
+          // Use hardware acceleration to reduce flickering
+          transform: 'translateZ(0)',
+          willChange: 'opacity',
+        }}
+      >
+        {wordGroups.map((group, index) => (
+          <span 
+            key={`${captionData.id}-${index}`} 
+            style={wordGroupStyle}
+          >
+            {group}
+          </span>
+        ))}
       </div>
+    );
+  };
+
+  // Generate a consistent random value based on the image index for variety in animations
+  const getConsistentRandomForImage = (imageIndex: number, min: number, max: number) => {
+    return random(imageIndex * 999) * (max - min) + min;
+  };
+
+  // Apply animation effects to images
+  const applyImageAnimation = (imageIndex: number, progress: number, style: React.CSSProperties): React.CSSProperties => {
+    if (imageAnimation === 'none') {
+      return style;
+    }
+
+    const animationStyle = { ...style };
+    
+    // Get a consistent random value for this image to ensure the animation doesn't change on re-renders
+    const randomSeed = imageIndex;
+    
+    // Calculate the frame within the current image's duration (resets for each image)
+    const secondsPerImage = 5;
+    const framesPerImage = secondsPerImage * fps;
+    const currentImageStartFrame = Math.floor(frame / framesPerImage) * framesPerImage;
+    const frameWithinImage = frame - currentImageStartFrame;
+    
+    // Different animation effects
+    switch (imageAnimation) {
+      case 'slow-fullscreen-zoom': {
+        // Bell curve zoom: from 1 (original) to 1.2 (max zoom) and back to 1
+        const scale = interpolate(
+          frameWithinImage,
+          [0, framesPerImage / 2, framesPerImage],
+          [1, 1.2, 1],  // Scale from 1 (original) to 1.2 (zoomed-in) and back to 1
+          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+        );
+        
+        // Ensure object-fit is cover to maintain fullscreen appearance
+        animationStyle.objectFit = 'cover';
+        animationStyle.transform = `${animationStyle.transform || ''} scale(${scale})`;
+        break;
+      }
+      
+      case 'zoom-in': {
+        const scale = interpolate(progress, [0, 1], [1, 1.15]);
+        animationStyle.transform = `${animationStyle.transform || ''} scale(${scale})`;
+        break;
+      }
+      
+      case 'zoom-out': {
+        const scale = interpolate(progress, [0, 1], [1.15, 1]);
+        animationStyle.transform = `${animationStyle.transform || ''} scale(${scale})`;
+        break;
+      }
+      
+      case 'pan-left': {
+        const translateX = interpolate(progress, [0, 1], [0, -5]);
+        animationStyle.transform = `${animationStyle.transform || ''} translateX(${translateX}%)`;
+        break;
+      }
+      
+      case 'pan-right': {
+        const translateX = interpolate(progress, [0, 1], [0, 5]);
+        animationStyle.transform = `${animationStyle.transform || ''} translateX(${translateX}%)`;
+        break;
+      }
+      
+      case 'ken-burns': {
+        // Ken Burns effect combines zoom and pan with subtle randomization
+        const startScale = getConsistentRandomForImage(randomSeed, 1.05, 1.15);
+        const endScale = getConsistentRandomForImage(randomSeed + 1, 1.1, 1.2);
+        
+        const startX = getConsistentRandomForImage(randomSeed + 2, -3, 3);
+        const endX = getConsistentRandomForImage(randomSeed + 3, -3, 3) * -1; // Move in opposite direction
+        
+        const startY = getConsistentRandomForImage(randomSeed + 4, -3, 3);
+        const endY = getConsistentRandomForImage(randomSeed + 5, -3, 3) * -1; // Move in opposite direction
+        
+        const scale = interpolate(progress, [0, 1], [startScale, endScale]);
+        const translateX = interpolate(progress, [0, 1], [startX, endX]);
+        const translateY = interpolate(progress, [0, 1], [startY, endY]);
+        
+        animationStyle.transform = `${animationStyle.transform || ''} scale(${scale}) translate(${translateX}%, ${translateY}%)`;
+        break;
+      }
+      
+      case 'subtle-pulse': {
+        // A gentle pulsing effect using spring
+        const pulseProgress = spring({
+          frame: frame % (fps * 4), // Reset every 4 seconds
+          fps,
+          config: { damping: 20, mass: 0.5 },
+        });
+        
+        const scale = interpolate(pulseProgress, [0, 1], [1, 1.03]);
+        animationStyle.transform = `${animationStyle.transform || ''} scale(${scale})`;
+        break;
+      }
+      
+      case 'random': {
+        // Randomly select one of the animations for each image
+        const animations = ['zoom-in', 'zoom-out', 'pan-left', 'pan-right', 'ken-burns'];
+        const selectedAnimation = animations[Math.floor(random(randomSeed) * animations.length)];
+        
+        // Recursively apply the randomly selected animation
+        return applyImageAnimation(imageIndex, progress, {
+          ...style,
+          ...animationStyle,
+        });
+      }
+    }
+    
+    return animationStyle;
+  };
+
+  // Render the image sequence directly in the component
+  const renderImageSequence = () => {
+    if (images.length === 0) return null;
+    
+    // Assume each image shows for 5 seconds
+    const secondsPerImage = 5;
+    const framesPerImage = secondsPerImage * fps;
+    
+    // Return a series of Sequences with images
+    return (
+      <>
+        {images.map((item, index) => {
+          const startTime = index * framesPerImage;
+          const duration = framesPerImage;
+          
+          // Calculate the scale animation
+          const scale = interpolate(
+            frame,
+            [startTime, startTime + duration / 2, startTime + duration],
+            [1, 1.2, 1], // Scale from 1 (original) to 1.2 (zoomed-in)
+            { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+          );
+          
+          return (
+            <Sequence key={index} from={startTime} durationInFrames={duration}>
+              <AbsoluteFill style={{ justifyContent: 'center', alignItems: 'center' }}>
+                <Img
+                  src={item.imageUrl}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    transform: `scale(${scale})`
+                  }}
+                />
+              </AbsoluteFill>
+            </Sequence>
+          );
+        })}
+      </>
+    );
+  };
+  
+  // Custom Img component that doesn't require explicit height/width
+  const Img = ({ src, style, ...rest }: React.ImgHTMLAttributes<HTMLImageElement>) => {
+    return <img src={src} style={style} {...rest} />;
+  };
+
+  return (
+    <AbsoluteFill style={{ backgroundColor: 'black' }}>
+      <AbsoluteFill 
+        style={{
+          position: 'absolute',
+          width: containerDimensions.width,
+          height: containerDimensions.height,
+          left: containerDimensions.left,
+          top: containerDimensions.top,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Background video if provided */}
+        {videoUrl && (
+          <Sequence from={0}>
+            <Video
+              src={videoUrl}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+              crossOrigin="anonymous" 
+            />
+          </Sequence>
+        )}
+
+        {/* Image sequence if no video or alongside video */}
+        {images.length > 0 && renderImageSequence()}
+
+        {/* Captions based on timing and preset */}
+        {!disableCaptions && displayCaption && (
+          <div style={getCaptionStyle(captionPreset)}>
+            {renderCaptionText(displayCaption.text, displayCaption)}
+          </div>
+        )}
+
+        {/* Audio track */}
+        {audioUrl && (
+          <Audio src={audioUrl} />
+        )}
+      </AbsoluteFill>
     </AbsoluteFill>
   );
-}; 
+};
+
+export default VideoComposition;

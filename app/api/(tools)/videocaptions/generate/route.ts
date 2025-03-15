@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AssemblyAI } from 'assemblyai';
 import VideoCaptions from "@/models/videoCaptionsModel/videoCaptionsModel";
 import { dbConnect } from "@/app/lib/db";
-
+import { auth } from '@clerk/nextjs/server';
 // Check if API key is available
 const apiKey = process.env.ASSEMBLY_AI_API_KEY;
 if (!apiKey) {
@@ -14,6 +14,11 @@ const client = new AssemblyAI({
 });
 
 export async function POST(request: NextRequest) {
+  const session = await auth();
+  const userId = session.userId;
+  if(!userId){
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     console.log("videocaptions/generate: Starting caption generation");
     

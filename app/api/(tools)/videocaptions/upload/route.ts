@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import VideoCaptions from "@/models/videoCaptionsModel/videoCaptionsModel";
 import { dbConnect } from "@/app/lib/db";
-import { uploadVideo } from "@/app/utils/cloudinary";
-
+import { uploadToCloudinary } from "@/app/utils/cloudinary";
+import { auth } from '@clerk/nextjs/server';
 export async function POST(request: NextRequest) {
+  const session = await auth();
+  const userId = session.userId;
+  if(!userId){
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   try {
     console.log("videocaptions/upload: Starting video upload process");
     
@@ -26,7 +31,7 @@ export async function POST(request: NextRequest) {
     if (uploadToCloudinary) {
       try {
         console.log("videocaptions/upload: Uploading to Cloudinary");
-        const uploadResult = await uploadVideo(videoUrl, {
+        const uploadResult = await uploadToCloudinary(videoUrl, 'video', {
           resource_type: 'video',
           folder: 'video-captions'
         });
@@ -46,6 +51,7 @@ export async function POST(request: NextRequest) {
     
     // Create a new video caption entry
     const videoCaption = new VideoCaptions({
+      userId,
       videoUrl: finalVideoUrl,
       title: title || 'Untitled Video',
       status: 'pending'

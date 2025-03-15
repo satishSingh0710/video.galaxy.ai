@@ -9,6 +9,7 @@ interface ICaptionWord {
 
 // Interface for PDF Brainrot
 export interface IPdfBrainrot extends Document {
+  userId: string;
   pdfUrl: string;
   pdfName: string;
   extractedText: string;
@@ -20,6 +21,8 @@ export interface IPdfBrainrot extends Document {
   updatedAt: Date;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   videoUrl?: string;
+  captionPreset?: 'BASIC' | 'REVID' | 'HORMOZI' | 'WRAP 1' | 'WRAP 2' | 'FACELESS' | 'ALL';
+  captionAlignment?: 'top' | 'middle' | 'bottom';
 }
 
 // Schema for Caption Word
@@ -48,6 +51,11 @@ const CaptionWordSchema = new Schema<ICaptionWord>({
 // Schema for PDF Brainrot
 const PdfBrainrotSchema = new Schema<IPdfBrainrot>(
   {
+    userId: {
+      type: String,
+      required: [true, 'User ID is required'],
+      trim: true
+    },
     pdfUrl: {
       type: String,
       required: [true, 'PDF URL is required'],
@@ -96,6 +104,16 @@ const PdfBrainrotSchema = new Schema<IPdfBrainrot>(
     videoUrl: {
       type: String,
       trim: true
+    }, 
+    captionPreset: {
+      type: String,
+      enum: ["BASIC", "REVID", "HORMOZI", "WRAP 1", "WRAP 2", "FACELESS", "ALL"],
+      default: 'BASIC'
+    }, 
+    captionAlignment: {
+      type: String, 
+      enum: ['top', 'middle', 'bottom'],
+      default: 'bottom'
     }
   },
   {

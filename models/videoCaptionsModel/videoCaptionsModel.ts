@@ -9,6 +9,7 @@ interface ICaptionWord {
 
 // Interface for Video Captions
 export interface IVideoCaption extends Document {
+  userId: string;
   videoUrl: string;
   captions: ICaptionWord[];
   fullText: string;
@@ -16,6 +17,8 @@ export interface IVideoCaption extends Document {
   updatedAt: Date;
   title: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
+  captionPreset?: 'BASIC' | 'REVID' | 'HORMOZI' | 'WRAP 1' | 'WRAP 2' | 'FACELESS' | 'ALL';
+  captionAlignment?: 'top' | 'middle' | 'bottom';
 }
 
 // Schema for Caption Word
@@ -44,6 +47,11 @@ const CaptionWordSchema = new Schema<ICaptionWord>({
 // Schema for Video Captions
 const VideoCaptionsSchema = new Schema<IVideoCaption>(
   {
+    userId: {
+      type: String,
+      required: [true, 'User ID is required'],
+      trim: true
+    },
     videoUrl: {
       type: String,
       required: [true, 'Video URL is required'],
@@ -66,6 +74,16 @@ const VideoCaptionsSchema = new Schema<IVideoCaption>(
       type: String,
       enum: ['pending', 'processing', 'completed', 'failed'],
       default: 'pending'
+    },
+    captionPreset: {
+      type: String,
+      enum: ["BASIC", "REVID", "HORMOZI", "WRAP 1", "WRAP 2", "FACELESS", "ALL"],
+      default: 'BASIC'
+    }, 
+    captionAlignment: {
+      type: String,
+      enum: ['top', 'middle', 'bottom'],
+      default: 'bottom'
     }
   },
   {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { uploadAudioBuffer } from '@/app/utils/cloudinary';
 import { Readable } from 'stream';
+import { auth } from '@clerk/nextjs/server';
 
 // Check if API key is available
 const apiKey = process.env.ELEVEN_LAB_API_KEY;
@@ -67,6 +68,11 @@ async function streamToBuffer(stream: any): Promise<Buffer> {
 }
 
 export async function POST(request: NextRequest) {
+    const session = await auth();
+    const userId  = session.userId;
+    if(!userId){
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     try {
         console.log("getaudio: Starting audio generation");
         // Parse the request body
@@ -117,7 +123,7 @@ export async function POST(request: NextRequest) {
         console.log("getaudio: Uploading audio buffer to Cloudinary");
         const cloudinaryResponse = await uploadAudioBuffer(audioBuffer, {
             resource_type: 'auto',
-            folder: 'audio-uploads',
+            folder: 'tik-tok-video-gen-audio',
             unique_filename: true
         });
         

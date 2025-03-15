@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
+import { auth } from '@clerk/nextjs/server';
 
 // Initialize OpenAI client
 const openai = new OpenAI({
@@ -7,6 +8,11 @@ const openai = new OpenAI({
 });
 
 export async function POST(request: NextRequest) {
+    const session = await auth();
+    const userId  = session.userId;
+    if(!userId){
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     try {
         console.log("videoscript: Starting script generation");
         const { extractedText } = await request.json();

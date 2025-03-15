@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Text to Audio App",
-  description: "Generate audio from text using AI voices",
+  title: "Galaxy AI Video Generator",
+  description: "Generate videos from text, images, and audio with AI",
 }; 

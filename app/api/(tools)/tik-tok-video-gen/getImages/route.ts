@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { uploadToCloudinary } from "@/app/utils/cloudinary";
+import { auth } from '@clerk/nextjs/server';
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY
 });
 
 export async function POST(request: NextRequest) {
+    const session = await auth();
+    const userId  = session.userId;
+    if(!userId){
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     try {
         const body = await request.json();
-        const { imagePrompt, preset } = body;
+        const { imagePrompt, preset, screenRatio } = body;
 
         console.log("imagePrompt = ", imagePrompt);
 
@@ -25,7 +31,7 @@ export async function POST(request: NextRequest) {
         // Generate image using DALL-E
         const response = await openai.images.generate({
             model: "dall-e-3",
-            prompt: `A ${preset} image of ${imagePrompt}, and make sure the image do not have any text on it.`,
+            prompt: `A ${preset} image of ${imagePrompt}, and make sure the image do not have any text on it. ${screenRatio ? `The image should be suitable for a ${screenRatio} screen ratio.` : ''}`,
             n: 1,
             size: "1024x1024",
             quality: "standard",

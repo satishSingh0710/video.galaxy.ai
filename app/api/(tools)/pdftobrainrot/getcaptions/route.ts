@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { AssemblyAI } from 'assemblyai';
+import { auth } from '@clerk/nextjs/server';
 
 // Check if API key is available
 const apiKey = process.env.ASSEMBLY_AI_API_KEY;
@@ -12,6 +13,11 @@ const client = new AssemblyAI({
 });
 
 export async function POST(request: NextRequest) {
+    const session = await auth();
+    const userId  = session.userId;
+    if(!userId){
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     try {
         console.log("getcaptions: Starting caption generation");
         const { audioUrl } = await request.json();
