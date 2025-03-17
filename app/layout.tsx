@@ -3,8 +3,6 @@ import {
   ClerkProvider,
   UserButton,
 } from '@clerk/nextjs'
-
-import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import { useState } from "react";
 import VideoHistoryModal from "./(app)/(tools)/tik-tok-video-gen/components/VideoHistoryModal";
@@ -21,15 +19,6 @@ import {
   X
 } from 'lucide-react';
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export default function RootLayout({
   children,
@@ -43,7 +32,7 @@ export default function RootLayout({
     <ClerkProvider>
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-50`}
+        className={`antialiased bg-gray-50`}
       >
         <nav className="bg-white shadow-sm sticky top-0 z-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
