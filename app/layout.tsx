@@ -109,16 +109,20 @@ export default function RootLayout({
                             <p className="mt-1 text-sm text-gray-500">Turn text into viral brainrot videos with AI voice and trending backgrounds</p>
                           </div>
                         </Link>
+
+                        {/* Tweet to Video */}
+                        <Link href="/tweettovideo" className="flex items-start p-4 rounded-lg transition-colors duration-200 hover:bg-indigo-50 group/item">
+                          <div className="flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-indigo-100 text-indigo-600 group-hover/item:bg-indigo-200 transition-colors duration-200">
+                            <MessageSquareText className="h-6 w-6" />
+                          </div>
+                          <div className="ml-4">
+                            <p className="text-sm font-medium text-gray-900 group-hover/item:text-indigo-700 transition-colors duration-200">Tweet to Video</p>
+                            <p className="mt-1 text-sm text-gray-500">Generate a video from a tweet.</p>
+                          </div>
+                        </Link>
                       </div>
                     </div>
                   </div>
-                  
-                  <Link
-                    href="/test-video-generator"
-                    className="text-gray-900 hover:text-indigo-600 inline-flex items-center px-1 pt-1 text-sm font-medium transition-colors duration-200"
-                  >
-                    Test Generator
-                  </Link>
                 </div>
               </div>
 
