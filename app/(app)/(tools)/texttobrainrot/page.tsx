@@ -213,17 +213,14 @@ export default function TextToBrainrotPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Enter Text</CardTitle>
-              <CardDescription>
-                Type or paste text to begin processing
-              </CardDescription>
+              <CardTitle>Enter script</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="input-text">Your Text</Label>
+                <Label htmlFor="input-text">Your script</Label>
                 <Textarea 
                   id="input-text"
-                  placeholder="Enter your text here..."
+                  placeholder="Enter your script here..."
                   className="min-h-[150px]"
                   value={inputText}
                   onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setInputText(e.target.value)}
