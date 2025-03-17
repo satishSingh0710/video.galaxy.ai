@@ -124,27 +124,27 @@ export default function PdfToBrainrotPage() {
         throw new Error('No text content extracted from PDF');
       }
 
-      // Step 2: Generate video script
-      const scriptResponse = await fetch('/api/pdftobrainrot/videoscript', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          extractedText: extractData.data.extractedText,
-        }),
-      });
+      // // Step 2: Generate video script
+      // const scriptResponse = await fetch('/api/pdftobrainrot/videoscript', {
+      //   method: 'POST',
+      //   headers: {
+      //     'Content-Type': 'application/json',
+      //   },
+      //   body: JSON.stringify({
+      //     extractedText: extractData.data.extractedText,
+      //   }),
+      // });
 
-      if (!scriptResponse.ok) {
-        throw new Error('Failed to generate video script');
-      }
+      // if (!scriptResponse.ok) {
+      //   throw new Error('Failed to generate video script');
+      // }
 
-      const scriptData = await scriptResponse.json();
-      console.log("scriptData from videoscript: ", scriptData.script);
+      // const scriptData = await scriptResponse.json();
+      // console.log("scriptData from videoscript: ", scriptData.script);
       
-      if (!scriptData.success || !scriptData.script) {
-        throw new Error('Failed to generate script content');
-      }
+      // if (!scriptData.success || !scriptData.script) {
+      //   throw new Error('Failed to generate script content');
+      // }
 
 
       // Step 3: Generate audio from script
@@ -154,7 +154,7 @@ export default function PdfToBrainrotPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: String(scriptData.script),
+          text: String(extractData.data.extractedText),
           voiceId: selectedVoice,
         }),
       });
@@ -194,7 +194,7 @@ export default function PdfToBrainrotPage() {
         pdfUrl: pdfFile.cdnUrl,
         pdfName: pdfFile.name || 'Unnamed PDF',
         extractedText: extractData.data.extractedText,
-        script: scriptData.script,
+        script: extractData.data.extractedText,
         audioUrl: audioData.audioUrl,
         captions: captionsData.words,
         voiceId: selectedVoice,
@@ -202,6 +202,8 @@ export default function PdfToBrainrotPage() {
         disableCaptions: disableCaptions,
         screenRatio: '9/16',
         bgVideo: selectedVideoUrl,
+        captionPreset: selectedCaptionPreset,
+        captionAlignment: selectedAlignment,
       };
       
       console.log('Debug - Request body:', requestBody);
@@ -245,7 +247,7 @@ export default function PdfToBrainrotPage() {
       });
 
       console.log('Generated Assets:', {
-        script: scriptData.script,
+        script: extractData.data.extractedText,
         audioUrl: audioData.audioUrl,
         captions: captionsData.words,
         savedData

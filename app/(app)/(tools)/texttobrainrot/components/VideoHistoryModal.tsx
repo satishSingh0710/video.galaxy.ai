@@ -29,9 +29,8 @@ import {
 
 interface Video {
   _id: string;
-  pdfName: string;
-  pdfUrl: string;
-  extractedText: string;
+  textName: string;
+  inputText: string;
   script: string;
   audioUrl: string;
   duration: number;
@@ -195,7 +194,7 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/pdftobrainrot/history');
+      const response = await fetch('/api/texttobrainrot/history');
       if (!response.ok) {
         throw new Error('Failed to fetch videos');
       }
@@ -256,7 +255,7 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          id: 'PdfBrainrotVideo',
+          id: 'TextBrainrotVideo',
           inputProps,
         }),
       });
@@ -291,7 +290,7 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
     
     try {
       setDeletingId(videoToDelete);
-      const response = await fetch(`/api/pdftobrainrot/delete?id=${videoToDelete}`, {
+      const response = await fetch(`/api/texttobrainrot/delete?id=${videoToDelete}`, {
         method: 'DELETE',
       });
       
@@ -320,7 +319,7 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
         <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto p-4 sm:p-6 w-[95vw] mx-auto">
           <DialogHeader>
             <DialogTitle>
-              {selectedVideo ? 'Video Preview' : 'PDF to Video History'}
+              {selectedVideo ? 'Video Preview' : 'Text to Video History'}
             </DialogTitle>
             <DialogDescription>
               {selectedVideo 
@@ -508,7 +507,9 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
                       <div className="flex justify-between items-start">
                         <div className="max-w-[70%]">
                           <h3 className="font-medium text-sm">
-                            {video.pdfName}
+                            {video.textName.length > 12 
+                              ? `${video.textName.substring(0, 18)}...` 
+                              : video.textName}
                           </h3>
                           <p className="text-xs text-muted-foreground mt-1">
                             {formatDistanceToNow(new Date(video.createdAt), { addSuffix: true })}
