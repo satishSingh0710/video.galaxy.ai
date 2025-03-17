@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     }
     
     try {
-       await dbConnect();
+        await dbConnect();
         
         const body = await request.json();
         const {
@@ -26,11 +26,20 @@ export async function POST(request: NextRequest) {
             captionAlignment,
             screenRatio,
         } = body;
+
+        console.log("Saving tweet video: ", body);
         
         // Validate required fields
-        if (!title || !script || !audioUrl || !images || !Array.isArray(images)) {
+        const missingFields = [];
+        if (!title) missingFields.push('title');
+        if (!script) missingFields.push('script');
+        if (!audioUrl) missingFields.push('audioUrl');
+        if (!images || !Array.isArray(images)) missingFields.push('images');
+        if (!duration) missingFields.push('duration');
+        
+        if (missingFields.length > 0) {
             return NextResponse.json(
-                { error: "Missing required fields" },
+                { error: `Missing required fields: ${missingFields.join(', ')}` },
                 { status: 400 }
             );
         }
@@ -47,11 +56,12 @@ export async function POST(request: NextRequest) {
             captionPreset: captionPreset || "BASIC",
             captionAlignment: captionAlignment || "bottom",
             screenRatio: screenRatio || "9/16",
-            createdAt: new Date().toISOString()
+            status: 'completed'
         });
         
         // Save to database using Mongoose
         const savedVideo = await video.save();
+        console.log("Saved video: ", savedVideo);
         
         return NextResponse.json({
             success: true,
@@ -59,6 +69,14 @@ export async function POST(request: NextRequest) {
         });
     } catch (error: any) {
         console.error("Error saving video:", error);
+        // Check if it's a validation error
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.values(error.errors).map((err: any) => err.message);
+            return NextResponse.json(
+                { error: `Validation error: ${validationErrors.join(', ')}` },
+                { status: 400 }
+            );
+        }
         return NextResponse.json(
             { error: "Failed to save video: " + error.message },
             { status: 500 }
@@ -101,6 +119,8 @@ export async function GET(request: NextRequest) {
             const videos = await TweetVideoModel
                 .find({ userId })
                 .sort({ createdAt: -1 });
+
+            console.log("Videos: ", videos);
             
             return NextResponse.json({ videos });
         }

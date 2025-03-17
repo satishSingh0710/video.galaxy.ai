@@ -99,6 +99,7 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
     let retryTimeoutId: NodeJS.Timeout;
     let retryCount = 0;
     const maxRetryCount = 5;
+    const baseDelay = 10000; // Increase to 10 seconds to reduce rate limit issues
 
     const checkProgress = async () => {
       if (!renderId) return;
@@ -107,10 +108,34 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
         const response = await fetch(`/api/remotion/status?id=${renderId}`);
         
         if (!response.ok) {
+          // Check for status codes first
+          if (response.status === 429) {
+            // Rate limiting - handle with backoff
+            const retryAfter = parseInt(response.headers.get('Retry-After') || '5', 10);
+            console.warn(`Rate limited (status code). Retrying in ${retryAfter} seconds`);
+
+            // Clear the polling interval
+            if (intervalId) clearTimeout(intervalId);
+
+            // Schedule a one-time retry after the specified delay
+            retryTimeoutId = setTimeout(() => {
+              // Restart polling with a longer interval
+              startPolling(baseDelay * Math.pow(2, Math.min(retryCount, 4))); // Max ~32 second interval
+            }, retryAfter * 1000);
+
+            return;
+          }
+          
           throw new Error('Failed to check render status');
         }
         
-        const data = await response.json();
+        let data;
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          console.error('Failed to parse response as JSON:', jsonError);
+          throw new Error('Invalid response format from server');
+        }
         
         if (data.status === 'error') {
           console.error('Render error:', data.error);
@@ -132,6 +157,8 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
         // Update progress
         if (data.progress !== undefined) {
           setRenderProgress(data.progress * 100);
+          // Reset retry count on successful response
+          retryCount = 0;
         }
         
         // Continue polling
@@ -139,11 +166,18 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
       } catch (err) {
         console.error('Error checking render progress:', err);
         
-        // Implement retry logic
+        // Implement exponential backoff for errors
         retryCount++;
-        if (retryCount < maxRetryCount) {
-          console.log(`Retrying progress check (${retryCount}/${maxRetryCount})...`);
-          retryTimeoutId = setTimeout(checkProgress, 3000 * retryCount); // Exponential backoff
+        
+        if (retryCount <= maxRetryCount) {
+          // Calculate backoff delay: 2s, 4s, 8s, 16s, 32s
+          const backoffDelay = baseDelay * Math.pow(2, retryCount - 1);
+          console.warn(`Error fetching progress. Retry ${retryCount}/${maxRetryCount} in ${backoffDelay / 1000}s`);
+          
+          // Schedule a one-time retry after backoff delay
+          retryTimeoutId = setTimeout(() => {
+            startPolling(Math.min(baseDelay * Math.pow(2, retryCount), 30000)); // Max 30 second interval
+          }, backoffDelay);
         } else {
           setIsRendering(false);
           setRenderProgress(0);
@@ -182,7 +216,9 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
       setLoading(true);
       setError(null);
       
-      const response = await fetch('/api/tweettovideo/videos');
+      const response = await fetch('/api/tweettovideo/videos', {
+        method: 'GET',
+      });
       
       if (!response.ok) {
         throw new Error('Failed to fetch videos');
@@ -269,180 +305,271 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
   };
 
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleString();
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
   };
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col bg-gray-900 text-white border-gray-800">
-        <DialogHeader className="border-b border-gray-800 pb-4">
-          <DialogTitle className="text-xl font-bold">Tweet Video History</DialogTitle>
-        </DialogHeader>
-        
-        <div className="flex-1 overflow-hidden flex flex-col md:flex-row gap-4 p-4">
-          {/* Video list */}
-          <div className="w-full md:w-1/3 bg-gray-800/50 rounded-lg overflow-hidden">
-            <ScrollArea className="h-[calc(90vh-10rem)]">
-              {loading ? (
-                <div className="flex items-center justify-center h-32 p-4">
-                  <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-                  <span className="ml-2 text-sm">Loading videos...</span>
-                </div>
-              ) : error ? (
-                <div className="p-4 text-red-400 text-sm">{error}</div>
-              ) : videos.length === 0 ? (
-                <div className="p-4 text-gray-400 text-sm">No videos found</div>
-              ) : (
-                <div className="space-y-2 p-2">
-                  {videos.map((video) => (
-                    <button
-                      key={video._id}
-                      onClick={() => handlePlayVideo(video)}
-                      className={`w-full text-left p-3 rounded-lg transition-all hover:bg-gray-700/50 ${
-                        selectedVideo?._id === video._id ? 'bg-gray-700/50 ring-1 ring-blue-500' : ''
-                      }`}
-                    >
-                      <h3 className="font-medium truncate text-sm">{video.title}</h3>
-                      <div className="flex items-center text-xs text-gray-400 mt-1.5">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        <span>{formatDate(video.createdAt)}</span>
-                        <Clock className="h-3 w-3 ml-3 mr-1" />
-                        <span>{Math.round(video.duration)}s</span>
-                      </div>
-                      {video.tweetUrl && (
-                        <div className="text-xs text-gray-400 mt-1.5 truncate">
-                          <span>Tweet: {video.tweetUrl}</span>
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </ScrollArea>
-          </div>
-          
-          {/* Video preview */}
-          <div className="w-full md:w-2/3 bg-gray-800/50 rounded-lg overflow-hidden flex flex-col">
-            {!selectedVideo ? (
-              <div className="flex flex-col items-center justify-center h-full p-8 text-gray-400">
-                <Calendar className="h-12 w-12 mb-4 opacity-50" />
-                <p className="text-center">Select a video from the list to preview</p>
-              </div>
-            ) : (
-              <>
-                <div className="relative bg-black/50">
-                  {showPlayer && selectedVideo && (
-                    <div className={`w-full ${isPortraitVideo ? 'aspect-[9/16]' : 'aspect-video'} mx-auto`}>
-                      <Player
-                        component={RemotionVideo}
-                        inputProps={{
-                          audioUrl: selectedVideo.audioUrl,
-                          captions: selectedVideo.captions || [],
-                          captionPreset: captionPreset,
-                          captionAlignment: captionAlignment,
-                          segments: selectedVideo.images.map(img => ({
-                            imageUrl: img.imageUrl,
-                            ContextText: img.contextText,
-                            ImagePrompt: ''
-                          }))
-                        }}
-                        durationInFrames={Math.round((selectedVideo.duration || 10) * 30)}
-                        compositionWidth={1080}
-                        compositionHeight={1920}
-                        fps={30}
-                        controls
-                        style={{
-                          width: '100%',
-                          height: '100%'
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-                
-                <div className="p-4 space-y-4">
-                  <div className="space-y-2">
-                    <h2 className="text-lg font-semibold">{selectedVideo.title}</h2>
-                    
-                    {selectedVideo.tweetUrl && (
-                      <div className="text-sm">
-                        <span className="text-gray-400">Tweet URL: </span>
-                        <a 
-                          href={selectedVideo.tweetUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-blue-400 hover:underline break-all"
-                        >
-                          {selectedVideo.tweetUrl}
-                        </a>
-                      </div>
-                    )}
-                    
-                    <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-gray-300">
-                      <div>
-                        <span className="text-gray-400">Created: </span>
-                        <span>{formatDate(selectedVideo.createdAt)}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-400">Duration: </span>
-                        <span>{Math.round(selectedVideo.duration)} seconds</span>
-                      </div>
-                    </div>
+    <>
+      <div className="fixed inset-0 z-50 overflow-y-auto">
+        <div className="flex min-h-screen items-center justify-center px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+          {/* Background overlay with blur */}
+          <div
+            className="fixed inset-0 backdrop-blur-md bg-white/30 transition-opacity"
+            onClick={onClose}
+          />
+
+          {/* Modal panel */}
+          <div className="inline-block w-full max-w-7xl transform overflow-hidden rounded-lg bg-white p-4 md:p-6 text-left align-bottom shadow-xl transition-all sm:my-8 sm:align-middle">
+            <div className="absolute right-0 top-0 pr-4 pt-4">
+              <button
+                type="button"
+                className="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none"
+                onClick={onClose}
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="w-full">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4 md:mb-6">
+                Your Tweet Videos
+              </h3>
+
+              <ScrollArea className="h-[50vh] md:h-[70vh] w-full rounded-md overflow-y-auto -mx-2 px-2">
+                {loading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="h-6 w-6 animate-spin rounded-full border-2 border-t-blue-600"></div>
                   </div>
-                  
-                  <div className="flex flex-wrap gap-3 pt-2">
-                    <Button
-                      onClick={handleRender}
-                      disabled={isRendering}
-                      className="flex items-center gap-2"
-                    >
-                      {isRendering ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Rendering...
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-4 w-4" />
-                          Render Video
-                        </>
-                      )}
-                    </Button>
-                    
-                    {downloadUrl && (
-                      <Button
-                        onClick={handleDownload}
-                        variant="outline"
-                        className="flex items-center gap-2"
+                ) : error ? (
+                  <p className="py-8 text-center text-red-500">{error}</p>
+                ) : videos.length === 0 ? (
+                  <p className="py-8 text-center text-gray-500">No videos found</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6 p-2 md:p-4">
+                    {videos.map((video) => (
+                      <div
+                        key={video._id}
+                        className="group relative bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300"
                       >
-                        <Download className="h-4 w-4" />
-                        Download
-                      </Button>
-                    )}
+                        {/* Thumbnail */}
+                        <div className="relative h-52 overflow-hidden bg-gray-100">
+                          {video.images[0] && (
+                            <img
+                              src={video.images[0].imageUrl}
+                              alt={video.title}
+                              className="w-full h-full object-cover"
+                            />
+                          )}
+                          {/* Play button overlay */}
+                          <button
+                            onClick={() => handlePlayVideo(video)}
+                            className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                          >
+                            <div className="w-12 h-12 rounded-full bg-white/25 backdrop-blur-sm flex items-center justify-center">
+                              <Play className="h-6 w-6 text-white" />
+                            </div>
+                          </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-4">
+                          <h4 className="font-semibold text-lg mb-2 line-clamp-1">
+                            {video.title}
+                          </h4>
+
+                          {/* Metadata */}
+                          <div className="flex items-center justify-between text-xs text-gray-500">
+                            <div className="flex items-center gap-1">
+                              <Calendar className="h-4 w-4" />
+                              <span>{formatDate(video.createdAt)}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              <span>{Math.round(video.duration)}s</span>
+                            </div>
+                          </div>
+                          
+                          {video.tweetUrl && (
+                            <div className="mt-2 text-xs text-gray-500 truncate">
+                              <span className="block truncate">{video.tweetUrl}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  
-                  {isRendering && (
-                    <div className="space-y-2">
-                      <Progress value={renderProgress} className="h-2" />
-                      <p className="text-xs text-gray-400">
-                        {renderProgress < 100 
-                          ? `Rendering: ${Math.round(renderProgress)}%` 
-                          : 'Render complete!'}
-                      </p>
-                    </div>
-                  )}
-                  
-                  {error && (
-                    <div className="p-3 bg-red-900/30 border border-red-800 rounded-md text-sm text-red-300">
-                      {error}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+                )}
+              </ScrollArea>
+            </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+
+      {/* Video Player Dialog */}
+      {selectedVideo && (
+        <Dialog open={showPlayer} onOpenChange={(open: boolean) => {
+          setShowPlayer(open);
+          if (!open) setSelectedVideo(null);
+        }}>
+          <DialogOverlay className="backdrop-blur-md bg-white/30" />
+          <DialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-4xl translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-4 md:p-6 shadow-lg duration-200 sm:rounded-lg max-h-[90vh] overflow-y-auto">
+            <DialogHeader className="flex justify-between items-center">
+              <DialogTitle className="text-xl font-bold">{selectedVideo.title}</DialogTitle>
+            </DialogHeader>
+            
+            {isRendering && (
+              <div className="w-full space-y-1">
+                <Progress value={renderProgress} className="w-full h-2" />
+                <p className="text-xs text-muted-foreground text-right">
+                  This may take a few minutes
+                </p>
+              </div>
+            )}
+
+            {/* Layout with controls on right side */}
+            <div className="flex flex-col md:flex-row gap-3">
+              {/* Video player container */}
+              <div className="order-1 h-[500px] w-full md:w-2/3 max-w-lg mx-auto">
+                {audioLoading ? (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-100 rounded-lg">
+                    <div className="text-center">
+                      <div className="h-8 w-8 mx-auto border-4 border-t-blue-600 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin"></div>
+                      <p className="mt-2 text-sm text-gray-500">Loading video...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={`w-full h-full ${isPortraitVideo ? 'aspect-[9/16]' : 'aspect-video'}`}>
+                    <RemotionVideo
+                      audioUrl={selectedVideo.audioUrl}
+                      duration={audioDuration || undefined}
+                      captions={selectedVideo.captions || []}
+                      captionPreset={captionPreset}
+                      captionAlignment={captionAlignment}
+                      images={selectedVideo.images}
+                      screenRatio={selectedVideo.screenRatio || '9/16'}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* All controls - positioned on right side */}
+              <div className="order-2 w-full md:w-1/3 flex flex-col md:justify-center space-y-4">
+                {/* Caption Style dropdown */}
+                <div className="space-y-2">
+                  <label htmlFor="captionPreset" className="block text-sm font-medium text-gray-700">
+                    Caption Style
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="captionPreset"
+                      value={captionPreset}
+                      onChange={(e) => setCaptionPreset(e.target.value as 'BASIC' | 'REVID' | 'HORMOZI' | 'WRAP 1' | 'WRAP 2' | 'FACELESS' | 'ALL')}
+                      className="appearance-none w-full bg-white border border-gray-300 rounded-md py-2 pl-3 pr-10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    >
+                      <option value="BASIC">Basic</option>
+                      <option value="HORMOZI">Hormozi</option>
+                      <option value="WRAP 1">Wrap 1</option>
+                      <option value="WRAP 2">Wrap 2</option>
+                      <option value="FACELESS">Faceless</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Caption Position dropdown */}
+                <div className="space-y-2">
+                  <label htmlFor="captionAlignment" className="block text-sm font-medium text-gray-700">
+                    Caption Position
+                  </label>
+                  <div className="relative">
+                    <select
+                      id="captionAlignment"
+                      value={captionAlignment}
+                      onChange={(e) => setCaptionAlignment(e.target.value as 'top' | 'middle' | 'bottom')}
+                      className="appearance-none w-full bg-white border border-gray-300 rounded-md py-2 pl-3 pr-10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    >
+                      <option value="top">Top</option>
+                      <option value="middle">Middle</option>
+                      <option value="bottom">Bottom</option>
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tweet URL display */}
+                {selectedVideo.tweetUrl && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Tweet URL
+                    </label>
+                    <a 
+                      href={selectedVideo.tweetUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline break-all block"
+                    >
+                      {selectedVideo.tweetUrl}
+                    </a>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="pt-4 space-y-2">
+                  {renderComplete ? (
+                    <Button
+                      variant="default"
+                      className="flex items-center justify-center w-full"
+                      onClick={handleDownload}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download Video
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={handleRender}
+                      variant="default"
+                      disabled={isRendering}
+                      className="w-full"
+                    >
+                      {isRendering ? (
+                        <div className="flex items-center justify-center space-x-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          <span>Rendering: {Math.round(renderProgress)}%</span>
+                        </div>
+                      ) : (
+                        "Render Video"
+                      )}
+                    </Button>
+                  )}
+
+                  <Button
+                    onClick={() => setShowPlayer(false)}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    <X className="h-4 w-4 mr-2" />
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 } 

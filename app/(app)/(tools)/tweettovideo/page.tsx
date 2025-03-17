@@ -33,8 +33,6 @@ const VideoModal: React.FC<VideoModalProps> = ({
   screenRatio,
   audioDuration
 }) => {
-  if (!isOpen) return null;
-  
   // Determine aspect ratio class based on screenRatio
   let aspectRatioClass = "aspect-square"; // Default for 1/1
   if (screenRatio === '16/9') {
@@ -76,9 +74,11 @@ const VideoModal: React.FC<VideoModalProps> = ({
     contextText: segment.ContextText
   }));
   
+  if (!isOpen) return null;
+  
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 md:p-8"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8 backdrop-blur-md bg-black/30 overflow-y-auto"
       onClick={(e) => {
         // Close modal when clicking on backdrop (outside content)
         if (e.target === e.currentTarget) {
@@ -88,7 +88,7 @@ const VideoModal: React.FC<VideoModalProps> = ({
     >
       <div 
         id="video-modal-content"
-        className="relative bg-white rounded-lg overflow-hidden w-full max-w-4xl focus:outline-none shadow-xl"
+        className="relative bg-white rounded-lg overflow-hidden shadow-xl w-full max-w-[375px] focus:outline-none"
         tabIndex={-1}
         role="dialog"
         aria-modal="true"
@@ -106,8 +106,8 @@ const VideoModal: React.FC<VideoModalProps> = ({
         </button>
         
         {/* Title */}
-        <div className="p-4 border-b border-gray-200">
-          <h2 id="modal-title" className="text-2xl font-semibold text-gray-800">Your video is ready</h2>
+        <div className="p-4 border-b border-gray-200 bg-blue-50">
+          <h2 id="modal-title" className="text-xl font-bold text-gray-800">Your video is ready</h2>
         </div>
         
         {/* Video container with responsive aspect ratio */}
@@ -276,9 +276,18 @@ export default function TweetToVideoPage() {
       }
 
       const data = await response.json();
+      console.log("Audio generation response:", data);
+      console.log("Audio duration received:", data.duration);
+      
+      // Set both state values and return them for immediate use
       setAudioUrl(data.audioUrl);
       setAudioDuration(data.duration);
-      return data.audioUrl;
+      
+      // Return both the audio URL and duration for immediate use
+      return {
+        audioUrl: data.audioUrl,
+        duration: data.duration
+      };
     } catch (err: any) {
       setError(err.message || 'Failed to generate audio');
       setIsProcessing(false);
@@ -371,33 +380,49 @@ export default function TweetToVideoPage() {
     audioDuration: number
   ) => {
     try {
+      console.log("Starting to save video with duration:", audioDuration);
+      
+      const payload = {
+        title: `Tweet Video - ${new Date().toLocaleString()}`,
+        script,
+        audioUrl,
+        duration: audioDuration,
+        images: segments.map(segment => ({
+          contextText: segment.ContextText,
+          imageUrl: segment.imageUrl
+        })),
+        captions,
+        captionPreset,
+        captionAlignment,
+        screenRatio,
+      };
+      
+      console.log("Save video payload prepared:", JSON.stringify(payload).substring(0, 200) + "...");
+      
       const response = await fetch('/api/tweettovideo/videos', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          title: `Tweet Video - ${new Date().toLocaleString()}`,
-          script,
-          audioUrl,
-          duration: audioDuration,
-          images: segments.map(segment => ({
-            contextText: segment.ContextText,
-            imageUrl: segment.imageUrl
-          })),
-          captions,
-          captionPreset,
-          captionAlignment,
-          screenRatio,
-          tweetUrl
-        }),
+        body: JSON.stringify(payload),
       });
 
+      console.log("Save video response status:", response.status);
+      const data = await response.json();
+      console.log("Save video response data:", data);
+      
       if (!response.ok) {
-        console.error('Failed to save video to history');
+        console.error('Failed to save video:', data.error);
+        setError(data.error || 'Failed to save video to history');
+        throw new Error(data.error || 'Failed to save video to history');
       }
-    } catch (err) {
+
+      console.log('Video saved successfully:', data);
+      return data;
+    } catch (err: any) {
       console.error('Error saving video to history:', err);
+      setError(err.message || 'Failed to save video to history. Please try again.');
+      throw err;
     }
   };
 
@@ -420,17 +445,33 @@ export default function TweetToVideoPage() {
       const scriptSegments = await processScript(content);
       
       // Step 3: Generate audio
-      const audio = await generateAudio(scriptSegments);
+      const audioResult = await generateAudio(scriptSegments);
+      if(!audioResult.audioUrl) {
+        setError("Failed to generate audio");
+        setIsProcessing(false);
+        return;
+      }
       
-      // Step 4: Generate captions
-      const captionsData = await generateCaptions(audio);
+      // Keep local reference to audio URL for immediate use
+      const audioUrlValue = audioResult.audioUrl;
+      const audioDurationValue = audioResult.duration;
+      
+      // Update state for later use
+      setAudioUrl(audioUrlValue);
+      setAudioDuration(audioDurationValue);
+      
+      // Step 4: Generate captions - use the local value instead of the state value
+      const captionsData = await generateCaptions(audioUrlValue);
       
       // Step 5: Generate images
       const segmentsWithImages = await generateImages(scriptSegments);
       
       // Step 6: Save to history
-      if (audioDuration) {
-        await saveVideoToHistory(content, audio, segmentsWithImages, captionsData, audioDuration);
+      if (audioDurationValue) {
+        console.log("Saving video to history: ", content, audioUrlValue, segmentsWithImages, captionsData, audioDurationValue);
+        await saveVideoToHistory(content, audioUrlValue, segmentsWithImages, captionsData, audioDurationValue);
+      } else {
+        console.log("Cannot save video - audioDuration is missing. Tried all sources but none had a value.");
       }
       
       setProgress(100);
@@ -533,7 +574,7 @@ export default function TweetToVideoPage() {
           </Button>
         </div>
       
-        <div className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
             <label htmlFor="tweetUrl" className="block text-sm font-medium text-gray-700 mb-2">
               Tweet URL
@@ -864,6 +905,7 @@ export default function TweetToVideoPage() {
             <button
               type="submit"
               disabled={isProcessing}
+              onClick={handleSubmit}
               className={`w-full py-3 px-4 rounded-md font-medium transition-colors ${
                 isProcessing 
                   ? "bg-blue-400 cursor-not-allowed" 
@@ -881,7 +923,7 @@ export default function TweetToVideoPage() {
               ) : 'Generate Video'}
             </button>
           </div>
-        </div>
+        </form>
       </div>
       
       {/* Audio element for playback (hidden) */}

@@ -108,6 +108,16 @@ const TweetVideoSchema = new Schema<ITweetVideo>(
         message: 'Caption text cannot be empty'
       }
     },
+    title: {
+      type: String,
+      required: [true, 'Title is required'],
+      trim: true
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'processing', 'completed', 'failed'],
+      default: 'pending'
+    },
     disableCaptions: {
       type: Boolean,
       default: false
