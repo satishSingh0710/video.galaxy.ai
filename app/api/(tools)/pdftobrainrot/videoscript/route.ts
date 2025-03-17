@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
             messages: [
                 {
                     role: "system",
-                    content: "You are a professional video script writer. Convert the given text into an engaging, concise video script that's easy to follow and understand. The script should be conversational, clear, and maintain the key points while being suitable for video narration. Make sure that the script it not more than 400 words, but it should summarize the main points of the text. The script should be in the same language as the text provided. Whatever script you generate, that's going to be naratted as it is. Do not add any additional commentary or explanations."
+                    content: "You have to write a video script. Keep it as a paragraph and in the form of a story. The script should be in the same language as the text provided. Whatever script you generate, that's going to be naratted as it is. Do not add any additional commentary or explanations. Do not use headlines like narrator: or speaker: or anything like that. Just write the script as it is. Something which a dumb person can read as it is and please will understand. Please keep it brief and to the point. Very very important: Do not exceed the narration length of the script to 300 words."
                 },
                 {
                     role: "user",

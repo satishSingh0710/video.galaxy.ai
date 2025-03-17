@@ -23,6 +23,9 @@ export interface IPdfBrainrot extends Document {
   videoUrl?: string;
   captionPreset?: 'BASIC' | 'REVID' | 'HORMOZI' | 'WRAP 1' | 'WRAP 2' | 'FACELESS' | 'ALL';
   captionAlignment?: 'top' | 'middle' | 'bottom';
+  disableCaptions?: boolean;
+  screenRatio?: '1/1' | '16/9' | '9/16' | 'auto';
+  bgVideo?: string;
 }
 
 // Schema for Caption Word
@@ -114,6 +117,18 @@ const PdfBrainrotSchema = new Schema<IPdfBrainrot>(
       type: String, 
       enum: ['top', 'middle', 'bottom'],
       default: 'bottom'
+    }, 
+    disableCaptions: {
+      type: Boolean,
+      default: false
+    },
+    screenRatio: {
+      type: String,
+      default: '9/16'
+    }, 
+    bgVideo: {
+      type: String,
+      default: ''
     }
   },
   {

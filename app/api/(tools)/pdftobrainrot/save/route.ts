@@ -1,3 +1,4 @@
+"use server"
 import { NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/app/lib/db';
 import PdfBrainrot from '@/models/pdfBrainRotModel/pdfBrainRotModel';
@@ -21,13 +22,27 @@ export async function POST(req: NextRequest) {
       audioUrl, 
       captions, 
       voiceId, 
-      status 
+      status, 
+      disableCaptions,
+      screenRatio,
+      bgVideo
     } = body;
 
     // Validate required fields
-    if (!pdfUrl || !pdfName || !extractedText || !script || !audioUrl || !voiceId) {
+    if (!pdfUrl || !pdfName || !extractedText || !script || !audioUrl || !voiceId || typeof disableCaptions !== 'boolean' || !screenRatio || !bgVideo) {
+      const missingFields = [];
+      if (!pdfUrl) missingFields.push('pdfUrl');
+      if (!pdfName) missingFields.push('pdfName');
+      if (!extractedText) missingFields.push('extractedText');
+      if (!script) missingFields.push('script');
+      if (!audioUrl) missingFields.push('audioUrl');
+      if (!voiceId) missingFields.push('voiceId');
+      if (typeof disableCaptions !== 'boolean') missingFields.push('disableCaptions');
+      if (!screenRatio) missingFields.push('screenRatio');
+      if (!bgVideo) missingFields.push('bgVideo');
+
       return NextResponse.json(
-        { success: false, message: 'Missing required fields' },
+        { success: false, message: `Missing required fields: ${missingFields.join(', ')}` },
         { status: 400 }
       );
     }
@@ -51,7 +66,10 @@ export async function POST(req: NextRequest) {
       audioUrl,
       captions: formattedCaptions,
       voiceId,
-      status: status || 'completed'
+      status: status || 'completed', 
+      disableCaptions,
+      screenRatio,
+      bgVideo
     });
 
     return NextResponse.json(

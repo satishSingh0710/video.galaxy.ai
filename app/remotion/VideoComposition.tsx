@@ -30,6 +30,7 @@ interface VideoCompositionProps {
   disableCaptions?: boolean;
   screenRatio?: '1/1' | '16/9' | '9/16' | 'auto';
   imageAnimation?: 'none' | 'zoom-in' | 'zoom-out' | 'pan-left' | 'pan-right' | 'ken-burns' | 'subtle-pulse' | 'random' | 'slow-fullscreen-zoom';
+  duration?: number; // Duration in seconds
 }
 
 export const VideoComposition: React.FC<VideoCompositionProps> = ({
@@ -43,6 +44,7 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
   disableCaptions = false,
   screenRatio = 'auto',
   imageAnimation = 'none',
+  duration,
 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -115,7 +117,13 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
       if (captions.length === 0) return groups;
       
       // Sort captions by start time
-      const sortedCaptions = [...captions].sort((a, b) => a.start - b.start);
+      let sortedCaptions = [...captions].sort((a, b) => a.start - b.start);
+
+      // If duration is provided, filter out captions that start after the duration
+      if (duration !== undefined) {
+        const durationMs = duration * 1000;
+        sortedCaptions = sortedCaptions.filter(caption => caption.start < durationMs);
+      }
       
       // Create caption groups with a maximum of words that would result in 3-4 words per visual group
       let currentGroup: typeof sortedCaptions = [];
@@ -132,11 +140,16 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
           const firstCaptionStart = currentGroup[0].start;
           const lastCaptionEnd = Math.max(...currentGroup.map(c => c.end));
           
+          // If duration is provided, cap the end time at the duration
+          const endTime = duration !== undefined 
+            ? Math.min(lastCaptionEnd, duration * 1000)
+            : lastCaptionEnd;
+          
           // Create a new group with the combined text
           groups.push({
             text: currentGroup.map(c => c.text).join(' '),
             start: firstCaptionStart,
-            end: lastCaptionEnd,
+            end: endTime,
             wordCount: currentWordCount,
             id: `group-${groupId++}` // Use a stable ID to prevent re-renders
           });
@@ -156,17 +169,22 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
         const firstCaptionStart = currentGroup[0].start;
         const lastCaptionEnd = Math.max(...currentGroup.map(c => c.end));
         
+        // If duration is provided, cap the end time at the duration
+        const endTime = duration !== undefined 
+          ? Math.min(lastCaptionEnd, duration * 1000)
+          : lastCaptionEnd;
+        
         groups.push({
           text: currentGroup.map(c => c.text).join(' '),
           start: firstCaptionStart,
-          end: lastCaptionEnd,
+          end: endTime,
           wordCount: currentWordCount,
           id: `group-${groupId++}`
         });
       }
       
       return groups;
-    }, [captions]);
+    }, [captions, duration]);
     
     // Find the current caption group based on the current time
     const currentGroup = memoizedCaptionGroups.find(
@@ -175,6 +193,11 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
     
     if (currentGroup) {
       return currentGroup;
+    }
+    
+    // If duration is provided and current time is beyond duration, return null
+    if (duration !== undefined && currentTime >= duration * 1000) {
+      return null;
     }
     
     // If no current group, look for the next upcoming group as a preview
