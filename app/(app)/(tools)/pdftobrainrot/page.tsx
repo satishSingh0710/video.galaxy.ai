@@ -4,13 +4,14 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import UploadCareModal from "@/components/shared/UploadCareModal";
-import { Loader2, ChevronDown } from "lucide-react";
+import { Loader2, ChevronDown, History } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import VoiceSelector from "../tik-tok-video-gen/components/VoiceSelector";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RemotionVideo } from "@/app/remotion/RemotionVideo";
 import VideoSelector from "./components/VideoSelector";
+import VideoHistoryModal from "./components/VideoHistoryModal";
 
 // Define types for advanced options
 type CaptionPreset = 'BASIC' | 'REVID' | 'HORMOZI' | 'WRAP 1' | 'WRAP 2' | 'FACELESS' | 'ALL';
@@ -59,6 +60,8 @@ export default function PdfToBrainrotPage() {
     captions: Array<{text: string; start: number; end: number}>;
     duration: number;
   } | null>(null);
+
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
 
   const handleVoiceSelect = (voiceId: string) => {
     setSelectedVoice(voiceId);
@@ -264,9 +267,20 @@ export default function PdfToBrainrotPage() {
     <>
       <div className="container mx-auto py-8 px-4 md:px-6">
         <div className="max-w-3xl mx-auto space-y-8">
-          <div className="space-y-2">
-            <h1 className="text-3xl font-bold tracking-tight">PDF to Brainrot</h1>
-            <p className="text-muted-foreground">Upload a PDF file to process</p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
+            <div className="space-y-2">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-800">PDF to Video Generator</h1>
+              <p className="text-muted-foreground">Upload a PDF and generate a video with captions</p>
+            </div>
+            <Button 
+              variant="outline" 
+              size="sm"
+              className="mt-2 sm:mt-0 flex items-center gap-2"
+              onClick={() => setIsHistoryModalOpen(true)}
+            >
+              <History className="h-4 w-4" />
+              <span className="hidden sm:inline">History</span>
+            </Button>
           </div>
 
           <Card>
@@ -537,6 +551,12 @@ export default function PdfToBrainrotPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Video History Modal */}
+      <VideoHistoryModal 
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+      />
     </>
   );
 }
