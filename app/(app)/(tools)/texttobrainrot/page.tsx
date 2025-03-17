@@ -139,6 +139,7 @@ export default function TextToBrainrotPage() {
         textName: inputText.substring(0, 50) + (inputText.length > 50 ? '...' : ''),
         script: inputText,
         audioUrl: audioData.audioUrl,
+        audioDuration: audioData.duration || 0,
         captions: captionsData.words,
         voiceId: selectedVoice,
         status: 'completed',

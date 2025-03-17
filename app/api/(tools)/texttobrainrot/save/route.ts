@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
       screenRatio,
       bgVideo,
       captionPreset,
-      captionAlignment
+      captionAlignment,
+      audioDuration
     } = body;
 
     // Validate required fields
@@ -69,6 +70,7 @@ export async function POST(req: NextRequest) {
       disableCaptions,
       screenRatio,
       bgVideo, 
+      audioDuration,
       captionPreset,
       captionAlignment
     });

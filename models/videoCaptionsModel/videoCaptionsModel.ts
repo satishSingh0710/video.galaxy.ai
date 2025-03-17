@@ -19,6 +19,7 @@ export interface IVideoCaption extends Document {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   captionPreset?: 'BASIC' | 'REVID' | 'HORMOZI' | 'WRAP 1' | 'WRAP 2' | 'FACELESS' | 'ALL';
   captionAlignment?: 'top' | 'middle' | 'bottom';
+  audioDuration?: number;
 }
 
 // Schema for Caption Word
@@ -84,6 +85,10 @@ const VideoCaptionsSchema = new Schema<IVideoCaption>(
       type: String,
       enum: ['top', 'middle', 'bottom'],
       default: 'bottom'
+    },
+    audioDuration: {
+      type: Number,
+      default: 0
     }
   },
   {

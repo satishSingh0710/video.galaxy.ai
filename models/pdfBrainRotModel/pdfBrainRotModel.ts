@@ -26,6 +26,7 @@ export interface IPdfBrainrot extends Document {
   disableCaptions?: boolean;
   screenRatio?: '1/1' | '16/9' | '9/16' | 'auto';
   bgVideo?: string;
+  audioDuration?: number;
 }
 
 // Schema for Caption Word
@@ -129,6 +130,10 @@ const PdfBrainrotSchema = new Schema<IPdfBrainrot>(
     bgVideo: {
       type: String,
       default: ''
+    },
+    audioDuration: {
+      type: Number,
+      default: 0
     }
   },
   {

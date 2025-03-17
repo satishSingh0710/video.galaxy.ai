@@ -33,7 +33,7 @@ interface Video {
   inputText: string;
   script: string;
   audioUrl: string;
-  duration: number;
+  audioDuration: number;
   bgVideo: string;
   createdAt: string;
   captions: Array<{
@@ -88,8 +88,8 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
       });
       audio.addEventListener('error', () => {
         console.error('Error loading audio for duration detection');
-        if (selectedVideo.duration) {
-          setAudioDuration(selectedVideo.duration);
+        if (selectedVideo.audioDuration) {
+          setAudioDuration(selectedVideo.audioDuration);
         } else {
           setAudioDuration(10);
         }
@@ -99,7 +99,7 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
         audio.remove();
       };
     }
-  }, [selectedVideo?.audioUrl, selectedVideo?.duration]);
+  }, [selectedVideo?.audioUrl, selectedVideo?.audioDuration]);
 
   // Poll for render progress
   useEffect(() => {
@@ -402,7 +402,7 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
                       <div className="aspect-[9/16] w-full max-w-[280px] rounded-lg overflow-hidden">
                         <RemotionVideo
                           audioUrl={selectedVideo.audioUrl}
-                          duration={audioDuration || selectedVideo.duration}
+                          duration={selectedVideo.audioDuration || audioDuration || 0}
                           captions={selectedVideo.captions}
                           captionPreset={captionPreset}
                           captionAlignment={captionAlignment}

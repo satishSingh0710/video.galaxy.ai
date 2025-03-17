@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Play, Download, Clock, Calendar, Loader2 } from 'lucide-react';
+import { X, Play, Download, Clock, Calendar, Loader2, Trash2 } from 'lucide-react';
 import { Player } from '@remotion/player';
 import { RemotionVideo } from '@/app/remotion/RemotionVideo';
 import {
@@ -61,6 +61,8 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
   const [renderComplete, setRenderComplete] = useState(false);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [isPortraitVideo, setIsPortraitVideo] = useState(true); // TikTok videos are typically portrait
+
+  const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -234,6 +236,29 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
     }
   };
 
+  const handleDeleteVideo = async (videoId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      setDeletingVideoId(videoId);
+      
+      const response = await fetch(`/api/tweettovideo/videos/${videoId}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to delete video');
+      }
+      
+      // Remove the deleted video from the state
+      setVideos(videos.filter(video => video._id !== videoId));
+    } catch (err) {
+      console.error('Error deleting video:', err);
+      setError('Failed to delete video. Please try again later.');
+    } finally {
+      setDeletingVideoId(null);
+    }
+  };
+
   const handlePlayVideo = (video: Video) => {
     setSelectedVideo(video);
     setCaptionPreset(video.captionPreset || 'BASIC');
@@ -389,10 +414,19 @@ export default function VideoHistoryModal({ isOpen, onClose }: VideoHistoryModal
                               <Calendar className="h-4 w-4" />
                               <span>{formatDate(video.createdAt)}</span>
                             </div>
-                            <div className="flex items-center gap-1">
-                              <Clock className="h-4 w-4" />
-                              <span>{Math.round(video.duration)}s</span>
-                            </div>
+                            
+                            {/* Delete button */}
+                            <button
+                              onClick={(e) => handleDeleteVideo(video._id, e)}
+                              disabled={deletingVideoId === video._id}
+                              className="cursor-pointer w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-300 hover:bg-gray-100"
+                            >
+                              {deletingVideoId === video._id ? (
+                                <div className="h-4 w-4 border-2 border-t-red-500 border-r-transparent border-b-transparent border-l-transparent rounded-full animate-spin" />
+                              ) : (
+                                <Trash2 className="h-4 w-4 text-red-500 hover:text-red-600" />
+                              )}
+                            </button>
                           </div>
                           
                           {video.tweetUrl && (
