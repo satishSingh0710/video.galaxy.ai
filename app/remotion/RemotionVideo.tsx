@@ -3,6 +3,7 @@ import { Player, PlayerRef } from '@remotion/player';
 import { VideoComposition } from './VideoComposition';
 
 interface RemotionVideoProps {
+  bgMusicUrl?: string;
   duration?: number;
   audioUrl?: string;
   videoUrl?: string;
@@ -25,6 +26,7 @@ interface RemotionVideoProps {
 export function RemotionVideo({ 
   duration,
   audioUrl, 
+  bgMusicUrl,
   videoUrl, 
   images = [], 
   captions = [], 
@@ -43,8 +45,8 @@ export function RemotionVideo({
   
   // Debug props in RemotionVideo
   React.useEffect(() => {
-    console.log('RemotionVideo received props:', { audioUrl, videoUrl, images, captions, screenRatio, duration });
-  }, [audioUrl, videoUrl, images, captions, screenRatio, duration]);
+    console.log('RemotionVideo received props:', { audioUrl,bgMusicUrl, videoUrl, images, captions, screenRatio, duration });
+  }, [audioUrl, bgMusicUrl, videoUrl, images, captions, screenRatio, duration]);
 
   // Handle player initialization and error recovery
   React.useEffect(() => {
@@ -277,6 +279,7 @@ export function RemotionVideo({
           ref={playerRef}
           component={VideoComposition}
           inputProps={{
+            bgMusicUrl,
             audioUrl,
             videoUrl,
             images,

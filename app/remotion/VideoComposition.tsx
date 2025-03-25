@@ -12,6 +12,7 @@ import {
 } from 'remotion';
 
 interface VideoCompositionProps {
+  bgMusicUrl?: string;
   audioUrl?: string;
   videoUrl?: string;
   images: Array<{
@@ -34,6 +35,7 @@ interface VideoCompositionProps {
 }
 
 export const VideoComposition: React.FC<VideoCompositionProps> = ({
+  bgMusicUrl, 
   audioUrl,
   videoUrl,
   images = [],
@@ -661,6 +663,13 @@ export const VideoComposition: React.FC<VideoCompositionProps> = ({
             {renderCaptionText(displayCaption.text, displayCaption)}
           </div>
         )}
+
+        {/* Background music */}
+        {
+          bgMusicUrl && (
+            <Audio src={bgMusicUrl} volume={0.3}/>
+          )
+        }
 
         {/* Audio track */}
         {audioUrl && (

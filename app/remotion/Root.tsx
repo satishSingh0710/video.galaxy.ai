@@ -50,6 +50,7 @@ export const RemotionRoot: React.FC<RemotionRootProps> = ({
         defaultProps={{
           duration: audioDuration,
           images: [],
+          bgMusicUrl: '',
           videoUrl: '',
           audioUrl: '',
           captions: captions || [],
