@@ -53,7 +53,7 @@ export async function POST(request: NextRequest, response: NextResponse) {
             const renderProgress = await getRenderProgress({
                 bucketName: process.env.REMOTION_LAMBDA_BUCKET_NAME as string,
                 functionName,
-                region: "us-east-1",
+                region: "us-east-2",
                 renderId: id,
             });
             

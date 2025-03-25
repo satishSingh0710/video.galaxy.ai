@@ -6,7 +6,7 @@ import {
   import dotenv from "dotenv";
   import path from "path";
   
-  console.log("Selected region:", "us-east-1");
+  console.log("Selected region:", "us-east-2");
   dotenv.config();
   
   if (!process.env.REMOTION_AWS_ACCESS_KEY_ID && !process.env.REMOTION_AWS_SECRET_ACCESS_KEY) {
@@ -39,7 +39,7 @@ import {
     await deployFunction({
       createCloudWatchLogGroup: true,
       memorySizeInMb: parseInt(process.env.REMOTION_LAMBDA_MEMORY_SIZE_IN_MB),
-      region: "us-east-1",
+      region: "us-east-2",
       timeoutInSeconds: parseInt(process.env.REMOTION_LAMBDA_TIMEOUT_IN_SECONDS),
       diskSizeInMb: parseInt(process.env.REMOTION_LAMBDA_DISK_SIZE_IN_MB),
     });
@@ -51,7 +51,7 @@ import {
   process.stdout.write("Ensuring bucket... ");
   const { bucketName, alreadyExisted: bucketAlreadyExisted } =
     await getOrCreateBucket({
-      region: "us-east-1",
+      region: "us-east-2",
     });
   console.log(
     bucketName,
@@ -63,7 +63,7 @@ import {
     bucketName,
     entryPoint: path.join(process.cwd(), "app", "remotion", "index.ts"),
     siteName: "my-video",
-    region: "us-east-1",
+    region: "us-east-2",
   });
   
   console.log(siteName);

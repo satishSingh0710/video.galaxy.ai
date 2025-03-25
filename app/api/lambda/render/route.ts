@@ -1,6 +1,12 @@
-import {renderMediaOnLambda, speculateFunctionName} from "@remotion/lambda/client";
+import {renderMediaOnLambda, RenderMediaOnLambdaInput,speculateFunctionName} from "@remotion/lambda/client";
+
 import { NextRequest, NextResponse } from "next/server";
 
+
+const webhook: RenderMediaOnLambdaInput['webhook'] = {
+    url: 'https://mapsnap.app/api/webhook',
+    secret: null,
+};
 
 export async function POST(request: NextRequest, response: NextResponse){
     const body = await request.json();
@@ -15,7 +21,7 @@ export async function POST(request: NextRequest, response: NextResponse){
             memorySizeInMb: parseInt(process.env.REMOTION_LAMBDA_MEMORY_SIZE_IN_MB as string),
             timeoutInSeconds: parseInt(process.env.REMOTION_LAMBDA_TIMEOUT_IN_SECONDS as string),
         }),
-        region: "us-east-1",
+        region: "us-east-2",
         serveUrl: process.env.REMOTION_LAMBDA_SERVE_URL as string,
         composition: body.id, 
         inputProps: body.inputProps,
@@ -23,7 +29,8 @@ export async function POST(request: NextRequest, response: NextResponse){
         downloadBehavior: {
             type: "download", 
             fileName: "output.mp4",
-        }
+        }, 
+        webhook: webhook
     })
     return NextResponse.json(result);
 }
